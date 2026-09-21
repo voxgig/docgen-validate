@@ -1,0 +1,112 @@
+#!/usr/bin/env node
+/* Copyright (c) 2026 Voxgig Ltd, MIT License */
+
+// Turn a run's summary.log into REPORT.md and report.json.
+
+const Fs = require('node:fs')
+const Path = require('node:path')
+
+const PHASES = ['fetch', 'scaffold', 'build', 'generate', 'check', 'qa', 'rerun']
+
+function parse(text) {
+  const config = {}, sdks = {}, order = []
+  for (const line of text.split('\n')) {
+    let match
+    if ((match = line.match(/^config (\w+)=(.*)$/))) { config[match[1]] = match[2]; continue }
+    if ((match = line.match(/^result passed=(\d+) total=(\d+)$/))) {
+      config.passed = Number(match[1]); config.total = Number(match[2]); continue
+    }
+    if ((match = line.match(/^sdk=(\S+) repo=(\S+) spec=(\S+)$/))) {
+      if (!sdks[match[1]]) { sdks[match[1]] = { name: match[1], repo: match[2], spec: match[3] }; order.push(match[1]) }
+      continue
+    }
+    if ((match = line.match(/^(\w+)_(fetch|scaffold|overlay|build|generate|check|qa|rerun)_rc=(-?\d+)$/))) {
+      const sdk = sdks[match[1]]; if (sdk) sdk[match[2] + '_rc'] = Number(match[3]); continue
+    }
+    if ((match = line.match(/^(\w+)_(target|edition)_([\w-]+)_rc=(-?\d+)$/))) {
+      const sdk = sdks[match[1]]
+      if (sdk) { sdk[match[2] + 's'] = sdk[match[2] + 's'] || {}; sdk[match[2] + 's'][match[3]] = Number(match[4]) }
+      continue
+    }
+    if ((match = line.match(/^(\w+)_checks_(pass|total)=(\d+)$/))) {
+      const sdk = sdks[match[1]]; if (sdk) sdk['checks_' + match[2]] = Number(match[3]); continue
+    }
+  }
+  return { config, sdks: order.map(n => sdks[n]) }
+}
+
+const mark = rc => undefined === rc ? '-' : 0 === rc ? 'ok' : 'FAIL'
+
+function table(data) {
+  const head = '| SDK | ' + PHASES.join(' | ') + ' | doc checks |'
+  const rule = '| --- |' + PHASES.map(() => ' --- |').join('') + ' --- |'
+  const rows = data.sdks.map(sdk => {
+    const cells = PHASES.map(p => mark(sdk[p + '_rc']))
+    const checks = undefined === sdk.checks_total ? '-' : `${sdk.checks_pass}/${sdk.checks_total}`
+    return `| ${sdk.name} | ${cells.join(' | ')} | ${checks} |`
+  })
+  return [head, rule, ...rows]
+}
+
+function main() {
+  const args = process.argv.slice(2)
+  const at = args.indexOf('--run-dir')
+  if (at < 0) { console.error('usage: summarize --run-dir <dir>'); process.exit(2) }
+  const runDir = Path.resolve(args[at + 1])
+  const summary = Path.join(runDir, 'summary.log')
+  if (!Fs.existsSync(summary)) { console.error('no summary.log in ' + runDir); process.exit(2) }
+
+  const data = parse(Fs.readFileSync(summary, 'utf8'))
+  const passed = data.config.passed ?? 0
+  const total = data.config.total ?? data.sdks.length
+
+  const lines = [
+    '# docgen-validate run',
+    '',
+    `Run: \`${Path.basename(runDir)}\``,
+    '',
+    `- Started: ${data.config.started || '?'}`,
+    `- Finished: ${data.config.finished || '?'}`,
+    `- Targets: \`${data.config.targets || '?'}\``,
+    `- Editions: \`${data.config.editions || '?'}\``,
+    `- Text QA: ${data.config.qa || '?'} (Vale ${data.config.vale || '?'})`,
+    `- Byte-stability rerun: ${data.config.rerun || '?'}`,
+    '',
+    `**${passed}/${total} SDKs fully validated.**`,
+    '',
+    'An SDK passes when the documentation checks, the text QA gate and the',
+    'byte-stability rerun all succeed.',
+    '',
+    ...table(data),
+    '',
+    '## Per-SDK detail',
+    '',
+  ]
+
+  for (const sdk of data.sdks) {
+    lines.push(`### ${sdk.name}`)
+    lines.push('')
+    lines.push(`Source: \`${sdk.repo}\`, spec \`${sdk.spec}\``)
+    lines.push('')
+    for (const kind of ['targets', 'editions']) {
+      if (!sdk[kind]) continue
+      const entries = Object.entries(sdk[kind]).map(([k, v]) => `${k}=${mark(v)}`)
+      lines.push(`- ${kind}: ${entries.join(', ')}`)
+    }
+    if (undefined !== sdk.checks_total) {
+      lines.push(`- documentation checks: ${sdk.checks_pass}/${sdk.checks_total}`)
+    }
+    const failed = PHASES.filter(p => undefined !== sdk[p + '_rc'] && 0 !== sdk[p + '_rc'])
+    lines.push(failed.length ? `- failed phases: ${failed.join(', ')}` : '- all phases clean')
+    lines.push('')
+  }
+
+  Fs.writeFileSync(Path.join(runDir, 'REPORT.md'), lines.join('\n'))
+  Fs.writeFileSync(Path.join(runDir, 'report.json'),
+    JSON.stringify({ config: data.config, sdks: data.sdks }, null, 2) + '\n')
+  console.log(`wrote ${Path.join(runDir, 'REPORT.md')}`)
+  console.log(`wrote ${Path.join(runDir, 'report.json')}`)
+}
+
+if (require.main === module) main()
+module.exports = { parse }

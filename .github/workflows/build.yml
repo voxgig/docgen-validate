@@ -1,0 +1,28 @@
+name: build
+
+# Runs this repo's OWN tests: the comment gate and the check-docs negative
+# cases. It deliberately does not run a validation pass - that scaffolds five
+# SDK projects from npm and github, which is a job for a scheduled or manual
+# run, not for every push.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Syntax-check the driver
+        run: bash -n bin/validate-docgen
+      - name: Run the tests
+        run: make test

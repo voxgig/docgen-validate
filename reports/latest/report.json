@@ -1,0 +1,137 @@
+{
+  "config": {
+    "specs": "specs/default.txt",
+    "out": "/tmp/claude-0/-home-user/d7eb7591-ec7c-5a77-af80-f67f7f316499/scratchpad/full",
+    "cache": "/home/user/voxgig-sdk",
+    "run_dir": "/tmp/claude-0/-home-user/d7eb7591-ec7c-5a77-af80-f67f7f316499/scratchpad/full/_runs/20260921T164619Z",
+    "org": "voxgig-sdk",
+    "targets": "ts",
+    "editions": "summary,github-pages,presentation",
+    "create_sdkgen_path": "/home/user/voxgig-cs/create-sdkgen",
+    "docgen_path": "",
+    "qa": "on",
+    "vale": "off",
+    "rerun": "on",
+    "started": "2026-09-21T16:46:19Z",
+    "finished": "2026-09-21T16:47:55Z",
+    "passed": 0,
+    "total": 5
+  },
+  "sdks": [
+    {
+      "name": "openfoodfacts",
+      "repo": "openfoodfacts-sdk",
+      "spec": "openfoodfacts_0.1.0.json",
+      "fetch_rc": 0,
+      "scaffold_rc": 0,
+      "overlay_rc": 0,
+      "targets": {
+        "ts": 0
+      },
+      "editions": {
+        "summary": 0,
+        "github-pages": 0,
+        "presentation": 0
+      },
+      "build_rc": 0,
+      "generate_rc": 0,
+      "check_rc": 0,
+      "checks_pass": 16,
+      "checks_total": 16,
+      "qa_rc": 1,
+      "rerun_rc": 0
+    },
+    {
+      "name": "univec",
+      "repo": "univec-sdk",
+      "spec": "univec-openapi.json",
+      "fetch_rc": 0,
+      "scaffold_rc": 0,
+      "overlay_rc": 0,
+      "targets": {
+        "ts": 0
+      },
+      "editions": {
+        "summary": 0,
+        "github-pages": 0,
+        "presentation": 0
+      },
+      "build_rc": 0,
+      "generate_rc": 0,
+      "check_rc": 0,
+      "checks_pass": 16,
+      "checks_total": 16,
+      "qa_rc": 1,
+      "rerun_rc": 0
+    },
+    {
+      "name": "aareguru",
+      "repo": "aareguru-sdk",
+      "spec": "aareguru_0.1.0.yaml",
+      "fetch_rc": 0,
+      "scaffold_rc": 0,
+      "overlay_rc": 0,
+      "targets": {
+        "ts": 0
+      },
+      "editions": {
+        "summary": 0,
+        "github-pages": 0,
+        "presentation": 0
+      },
+      "build_rc": 0,
+      "generate_rc": 0,
+      "check_rc": 0,
+      "checks_pass": 16,
+      "checks_total": 16,
+      "qa_rc": 1,
+      "rerun_rc": 0
+    },
+    {
+      "name": "carbonintensity",
+      "repo": "carbon-intensity-sdk",
+      "spec": "carbon-intensity_0.1.0.json",
+      "fetch_rc": 0,
+      "scaffold_rc": 0,
+      "overlay_rc": 0,
+      "targets": {
+        "ts": 0
+      },
+      "editions": {
+        "summary": 0,
+        "github-pages": 0,
+        "presentation": 0
+      },
+      "build_rc": 0,
+      "generate_rc": 0,
+      "check_rc": 0,
+      "checks_pass": 16,
+      "checks_total": 16,
+      "qa_rc": 1,
+      "rerun_rc": 0
+    },
+    {
+      "name": "hubspotmarketing",
+      "repo": "hubspot-marketing-sdk",
+      "spec": "hubspot-marketing-openapi.json",
+      "fetch_rc": 0,
+      "scaffold_rc": 0,
+      "overlay_rc": 0,
+      "targets": {
+        "ts": 0
+      },
+      "editions": {
+        "summary": 0,
+        "github-pages": 0,
+        "presentation": 0
+      },
+      "build_rc": 0,
+      "generate_rc": 0,
+      "check_rc": 0,
+      "checks_pass": 16,
+      "checks_total": 16,
+      "qa_rc": 1,
+      "rerun_rc": 0
+    }
+  ]
+}

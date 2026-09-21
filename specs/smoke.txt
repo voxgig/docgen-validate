@@ -1,0 +1,3 @@
+# Smoke list - the two smallest SDKs, for a quick sanity check.
+openfoodfacts:openfoodfacts-sdk:openfoodfacts_0.1.0.json
+univec:univec-sdk:univec-openapi.json

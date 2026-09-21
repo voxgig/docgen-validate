@@ -1,0 +1,19 @@
+# Default SDK list for validate-docgen.
+# Format: <name>:<voxgig-sdk repo>:<spec-file under the repo's .sdk/def/>
+# Lines starting with '#' and blank lines are ignored.
+# Order matters - smallest first, so failures do not starve quick wins.
+#
+# These five span the documentation workload end to end:
+#
+#   name              paths  ops  schemas  format  notes
+#   openfoodfacts       4      4     4     json    floor case
+#   univec              8      8    11     json    ships its own docs upstream
+#   aareguru           11     11     0     yaml    YAML, and no component schemas
+#   carbonintensity    33     33    13     json    many routes, few schemas
+#   hubspotmarketing  100    133   313     json    ceiling case
+
+openfoodfacts:openfoodfacts-sdk:openfoodfacts_0.1.0.json
+univec:univec-sdk:univec-openapi.json
+aareguru:aareguru-sdk:aareguru_0.1.0.yaml
+carbonintensity:carbon-intensity-sdk:carbon-intensity_0.1.0.json
+hubspotmarketing:hubspot-marketing-sdk:hubspot-marketing-openapi.json

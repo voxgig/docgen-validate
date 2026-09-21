@@ -124,25 +124,18 @@ SDK repos are already cloned into the cache and `--no-fetch` is passed.
 Vale is optional. Without `--vale` the QA phase runs `--local-only`, which
 keeps the prose and link checks and skips the Vale pass.
 
-## A note on `--create-sdkgen-path`
+## `--create-sdkgen-path` and `--docgen-path`
 
-The scaffold that `npm create @voxgig/sdkgen` writes includes
-`.sdk/src/BuildSDK.ts`, which reads entity fields from the apidef model. The
-compact schema in `@voxgig/apidef` 8.14.0 renamed those attributes
-(`field.name` to `field.n`, `field.type` to `field.t`). The migration is
-merged on `@voxgig/create-sdkgen` `main` but is **not yet released to npm**, so
-the published scaffold does not compile against the current chain and the
-generate phase never runs.
-
-Until create-sdkgen is released, point the driver at a checkout:
+Both overlay a local checkout so an unreleased change can be validated before
+it ships. `--create-sdkgen-path` copies the scaffold-owned `.sdk/src` and
+nothing else; `--docgen-path` links the generator.
 
 ```bash
 make full ARGS='--create-sdkgen-path ../create-sdkgen'
 ```
 
-That overlays the scaffold-owned `.sdk/src` and nothing else. Once
-create-sdkgen is published the flag can be dropped, and the default path
-exercises exactly what a consumer gets.
+Neither is needed for an ordinary run. The default path scaffolds from the
+published `@voxgig/create-sdkgen`, which is exactly what a consumer gets.
 
 ## Findings
 
@@ -204,12 +197,23 @@ never hit it, and it took 313 schemas to surface seven instances.
 This is the argument for picking a complexity range rather than a
 representative sample.
 
-### The published scaffold does not compile
+### The published scaffold did not compile (fixed in create-sdkgen 0.26.0)
 
-See the note on `--create-sdkgen-path` above. `@voxgig/create-sdkgen` 0.25.0
-ships a scaffold that reads the pre-compact field schema, so with
-`@voxgig/apidef` 8.14.0 the build phase fails before documentation is ever
-generated. The migration is merged on create-sdkgen `main` and unreleased.
+The first run of this harness could not reach the documentation phases at all.
+`@voxgig/create-sdkgen` 0.25.0 shipped a scaffold whose own
+`.sdk/src/BuildSDK.ts` read the pre-compact field schema (`field.name`,
+`field.type`), which `@voxgig/apidef` 8.14.0 renamed to `field.n` and
+`field.t`. Every scaffolded project failed `npm run build` with six TS2339
+errors before generation ran, so `npm create @voxgig/sdkgen@latest` produced a
+project that did not compile.
+
+The migration had been merged on create-sdkgen `main` and never released.
+0.26.0 ships it, and the default path in this harness now builds and generates
+for all five SDKs with no override.
+
+This is the case for running the harness against published versions by
+default. The break existed only between what was on `main` and what was on
+npm, and nothing that tested a checkout would have seen it.
 
 ## Layout
 

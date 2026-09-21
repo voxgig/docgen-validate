@@ -1,9 +1,9 @@
 # docgen-validate run
 
-Run: `20260921T171048Z`
+Run: `20260921T172022Z`
 
-- Started: 2026-09-21T17:10:48Z
-- Finished: 2026-09-21T17:12:26Z
+- Started: 2026-09-21T17:20:22Z
+- Finished: 2026-09-21T17:21:57Z
 - Targets: `ts`
 - Editions: `summary,github-pages,presentation`
 - Text QA: on (Vale off)

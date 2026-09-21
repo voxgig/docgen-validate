@@ -17,9 +17,9 @@ help:
 	@echo "  make smoke ARGS='--only univec'"
 	@echo "  make full ARGS='--targets ts,go --vale'"
 	@echo ""
-	@echo "While the compact apidef schema migration is unreleased in"
-	@echo "@voxgig/create-sdkgen, add:"
+	@echo "To validate an unreleased tool checkout instead of the published one:"
 	@echo "  ARGS='--create-sdkgen-path ../create-sdkgen'"
+	@echo "  ARGS='--docgen-path ../docgen/ts'"
 
 smoke:
 	$(VALIDATE) --specs $(SPECS_SMOKE) $(ARGS)

@@ -1,19 +1,19 @@
 {
   "config": {
     "specs": "specs/default.txt",
-    "out": "/tmp/claude-0/-home-user/d7eb7591-ec7c-5a77-af80-f67f7f316499/scratchpad/full2",
+    "out": "/tmp/claude-0/-home-user/d7eb7591-ec7c-5a77-af80-f67f7f316499/scratchpad/nooverride",
     "cache": "/home/user/voxgig-sdk",
-    "run_dir": "/tmp/claude-0/-home-user/d7eb7591-ec7c-5a77-af80-f67f7f316499/scratchpad/full2/_runs/20260921T171048Z",
+    "run_dir": "/tmp/claude-0/-home-user/d7eb7591-ec7c-5a77-af80-f67f7f316499/scratchpad/nooverride/_runs/20260921T172022Z",
     "org": "voxgig-sdk",
     "targets": "ts",
     "editions": "summary,github-pages,presentation",
-    "create_sdkgen_path": "/home/user/voxgig-cs/create-sdkgen",
+    "create_sdkgen_path": "",
     "docgen_path": "",
     "qa": "on",
     "vale": "off",
     "rerun": "on",
-    "started": "2026-09-21T17:10:48Z",
-    "finished": "2026-09-21T17:12:26Z",
+    "started": "2026-09-21T17:20:22Z",
+    "finished": "2026-09-21T17:21:57Z",
     "passed": 0,
     "total": 5
   },
@@ -24,7 +24,6 @@
       "spec": "openfoodfacts_0.1.0.json",
       "fetch_rc": 0,
       "scaffold_rc": 0,
-      "overlay_rc": 0,
       "targets": {
         "ts": 0
       },
@@ -47,7 +46,6 @@
       "spec": "univec-openapi.json",
       "fetch_rc": 0,
       "scaffold_rc": 0,
-      "overlay_rc": 0,
       "targets": {
         "ts": 0
       },
@@ -70,7 +68,6 @@
       "spec": "aareguru_0.1.0.yaml",
       "fetch_rc": 0,
       "scaffold_rc": 0,
-      "overlay_rc": 0,
       "targets": {
         "ts": 0
       },
@@ -93,7 +90,6 @@
       "spec": "carbon-intensity_0.1.0.json",
       "fetch_rc": 0,
       "scaffold_rc": 0,
-      "overlay_rc": 0,
       "targets": {
         "ts": 0
       },
@@ -116,7 +112,6 @@
       "spec": "hubspot-marketing-openapi.json",
       "fetch_rc": 0,
       "scaffold_rc": 0,
-      "overlay_rc": 0,
       "targets": {
         "ts": 0
       },

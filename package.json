@@ -1,0 +1,17 @@
+{
+  "name": "docgen-validate",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Generates documentation for real SDKs with @voxgig/docgen and checks that it describes the model it was built from.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/voxgig/docgen-validate.git"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.cjs"
+  },
+  "devDependencies": {
+    "@vvago/vale": "^3.14.2"
+  }
+}

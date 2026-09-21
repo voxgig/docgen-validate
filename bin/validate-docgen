@@ -33,6 +33,8 @@ TARGET_TIMEOUT_DEFAULT=300
 BUILD_TIMEOUT_DEFAULT=600
 GEN_TIMEOUT_DEFAULT=1800
 QA_TIMEOUT_DEFAULT=600
+SCORE_TIMEOUT_DEFAULT=900
+SCORE_SCOPE_DEFAULT=all
 FETCH_TIMEOUT_DEFAULT=900
 
 usage() {
@@ -54,6 +56,13 @@ Usage: validate-docgen [options]
   --no-fetch                 Require the cache to be populated already
   --no-qa                    Skip the voxgig-docgen qa phase
   --vale                     Let qa run Vale (default: --local-only)
+  --no-score                 Skip the prose-score phase
+  --max-density <n>          Fail an SDK whose weighted alerts per 1000 words
+                             exceed <n>. Unset, the score is recorded but
+                             never fails a run.
+  --score-scope <s>          authored (what docgen's own gate reads) or all
+                             (every rendered word, tables included).
+                             Default: both, gated on ${SCORE_SCOPE_DEFAULT}.
   --no-rerun                 Skip the byte-stability phase
   --keep                     Keep existing project folders instead of removing
   --no-summary               Skip writing REPORT.md / report.json
@@ -62,6 +71,7 @@ Usage: validate-docgen [options]
   --build-timeout <s>        (default: ${BUILD_TIMEOUT_DEFAULT})
   --gen-timeout <s>          (default: ${GEN_TIMEOUT_DEFAULT})
   --qa-timeout <s>           (default: ${QA_TIMEOUT_DEFAULT})
+  --score-timeout <s>        (default: ${SCORE_TIMEOUT_DEFAULT})
   -h, --help
 
 Spec list format: <name>:<repo>:<spec-file under the repo's .sdk/def/>
@@ -81,6 +91,9 @@ DOCGEN_PATH=""
 NO_FETCH=0
 NO_QA=0
 VALE=0
+NO_SCORE=0
+MAX_DENSITY=""
+SCORE_SCOPE=""
 NO_RERUN=0
 KEEP=0
 NO_SUMMARY=0
@@ -89,6 +102,7 @@ TARGET_TIMEOUT="${TARGET_TIMEOUT_DEFAULT}"
 BUILD_TIMEOUT="${BUILD_TIMEOUT_DEFAULT}"
 GEN_TIMEOUT="${GEN_TIMEOUT_DEFAULT}"
 QA_TIMEOUT="${QA_TIMEOUT_DEFAULT}"
+SCORE_TIMEOUT="${SCORE_TIMEOUT_DEFAULT}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -105,6 +119,9 @@ while [ $# -gt 0 ]; do
     --no-fetch)           NO_FETCH=1; shift;;
     --no-qa)              NO_QA=1; shift;;
     --vale)               VALE=1; shift;;
+    --no-score)           NO_SCORE=1; shift;;
+    --max-density)        MAX_DENSITY="$2"; shift 2;;
+    --score-scope)        SCORE_SCOPE="$2"; shift 2;;
     --no-rerun)           NO_RERUN=1; shift;;
     --keep)               KEEP=1; shift;;
     --no-summary)         NO_SUMMARY=1; shift;;
@@ -113,6 +130,7 @@ while [ $# -gt 0 ]; do
     --build-timeout)      BUILD_TIMEOUT="$2"; shift 2;;
     --gen-timeout)        GEN_TIMEOUT="$2"; shift 2;;
     --qa-timeout)         QA_TIMEOUT="$2"; shift 2;;
+    --score-timeout)      SCORE_TIMEOUT="$2"; shift 2;;
     -h|--help)            usage; exit 0;;
     *) echo "ERROR: unknown option: $1" >&2; usage >&2; exit 2;;
   esac
@@ -173,6 +191,9 @@ say() { echo "$*" | tee -a "${SUMMARY}"; }
   echo "config docgen_path=${DOCGEN_PATH}"
   echo "config qa=$([ "${NO_QA}" = 1 ] && echo off || echo on)"
   echo "config vale=$([ "${VALE}" = 1 ] && echo on || echo off)"
+  echo "config score=$([ "${NO_SCORE}" = 1 ] && echo off || echo on)"
+  echo "config score_scope=${SCORE_SCOPE}"
+  echo "config max_density=${MAX_DENSITY}"
   echo "config rerun=$([ "${NO_RERUN}" = 1 ] && echo off || echo on)"
   echo "config started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >> "${SUMMARY}"
@@ -215,6 +236,26 @@ if [ -z "${HASHER}" ] && [ "${NO_RERUN}" = 0 ]; then
   echo "ERROR: no content hasher found (shasum, sha256sum, sha1sum, md5sum, cksum)." >&2
   echo "       The byte-stability phase needs one. Pass --no-rerun to skip it." >&2
   exit 2
+fi
+
+# Scoring is a gate, so a missing Vale is fatal rather than a quiet skip: a
+# phase that vanishes when a dependency is absent reports the same clean run
+# as a phase that passed.
+VALE_BIN=""
+if [ "${NO_SCORE}" = 0 ]; then
+  if [ -x "${REPO_DIR}/node_modules/@vvago/vale/bin/vale" ]; then
+    VALE_BIN="${REPO_DIR}/node_modules/@vvago/vale/bin/vale"
+  elif command -v vale >/dev/null 2>&1; then
+    VALE_BIN="$(command -v vale)"
+  else
+    echo "ERROR: no vale binary found." >&2
+    echo "       Run 'npm install' in ${REPO_DIR}, or pass --no-score." >&2
+    exit 2
+  fi
+  case "${SCORE_SCOPE}" in
+    ''|authored|all) ;;
+    *) echo "ERROR: --score-scope must be 'authored' or 'all'" >&2; exit 2;;
+  esac
 fi
 
 docs_digest() {
@@ -374,7 +415,58 @@ while IFS= read -r line || [ -n "${line}" ]; do
     echo "${name}_qa_rc=$?" >> "${SUMMARY}"
   fi
 
-  # 10. byte stability - the same model must render the same documentation.
+  # 10. prose score
+  #
+  # qa answers "is anything forbidden present". This asks "how is the prose
+  # doing", over the same rules and the same text, as a number that can be
+  # compared between releases.
+  #
+  # BOTH scopes are measured, because they are different questions and the
+  # gap between them is itself a finding: docgen hands Vale `authored()`,
+  # which strips table cells, and a generated API reference keeps the
+  # vendor's schema descriptions in exactly those cells. Scoring `authored`
+  # alone measures the documentation docgen WROTE and none of the
+  # documentation it CARRIED THROUGH.
+  if [ "${NO_SCORE}" = 0 ]; then
+    say ">> [${name}] score"
+    score_rc=0
+    sync_flag=""
+    gate_scope="${SCORE_SCOPE:-${SCORE_SCOPE_DEFAULT}}"
+    for scope in authored all; do
+      [ -n "${SCORE_SCOPE}" ] && [ "${SCORE_SCOPE}" != "${scope}" ] && continue
+      # The gate is the scorer's own, applied to one scope. Restating the
+      # comparison here would put the threshold in two places and leave the
+      # shell copy untested.
+      gate_arg=""
+      [ -n "${MAX_DENSITY}" ] && [ "${scope}" = "${gate_scope}" ] \
+        && gate_arg="--max-density ${MAX_DENSITY}"
+      run_with_timeout "${SCORE_TIMEOUT}" \
+        "${REPO_DIR}/bin/prose-score" --json --scope "${scope}" --vale "${VALE_BIN}" \
+        ${sync_flag} ${gate_arg} "${folder}" \
+        > "${log_base}.score.${scope}.json" 2>> "${log_base}.score.log"
+      rc=$?
+      # The rule package is pinned by URL and the sync writes into this
+      # project's own styles directory, so one sync per project covers both
+      # scopes. Re-syncing would fetch the identical release twice.
+      sync_flag="--no-sync"
+      [ "${rc}" = 0 ] || score_rc=1
+      [ -s "${log_base}.score.${scope}.json" ] || { score_rc=1; continue; }
+      node -e '
+        const r = require(process.argv[1])
+        const [name, scope] = process.argv.slice(2)
+        const out = [
+          ["score", r.score], ["density", r.density], ["words", r.words],
+          ["errors", r.alerts.error], ["warnings", r.alerts.warning],
+          ["suggestions", r.alerts.suggestion],
+        ]
+        process.stdout.write(out.map(([k, v]) => `${name}_${k}_${scope}=${v}`).join("\n") + "\n")
+      ' "${log_base}.score.${scope}.json" "${name}" "${scope}" >> "${SUMMARY}" 2>/dev/null || score_rc=1
+    done
+
+    echo "${name}_score_rc=${score_rc}" >> "${SUMMARY}"
+  fi
+
+  # 11. byte stability - the same model must render the same documentation.
   if [ "${NO_RERUN}" = 0 ]; then
     say ">> [${name}] rerun"
     before="$(docs_digest "${folder}")"
@@ -395,6 +487,7 @@ while IFS= read -r line || [ -n "${line}" ]; do
   ok=1
   grep -q "^${name}_check_rc=0$" "${SUMMARY}" || ok=0
   [ "${NO_QA}" = 1 ] || grep -q "^${name}_qa_rc=0$" "${SUMMARY}" || ok=0
+  [ "${NO_SCORE}" = 1 ] || grep -q "^${name}_score_rc=0$" "${SUMMARY}" || ok=0
   [ "${NO_RERUN}" = 1 ] || grep -q "^${name}_rerun_rc=0$" "${SUMMARY}" || ok=0
   if [ "${ok}" = 1 ]; then PASSED=$((PASSED + 1)); say "++ [${name}] PASS"
   else say "!! [${name}] FAIL"; fi

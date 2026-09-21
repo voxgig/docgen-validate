@@ -49,9 +49,39 @@ For each SDK:
 6. **generate** — `npm run generate`
 7. **check** — `bin/check-docs`
 8. **qa** — `voxgig-docgen qa`
-9. **rerun** — regenerate, and require the documentation to be byte-identical
+9. **score** — `bin/prose-score`, a deterministic prose score over the same
+   Vale rules (below). Recorded always; a gate only with `--max-density`.
+10. **rerun** — regenerate, and require the documentation to be byte-identical
 
-An SDK passes when 7, 8 and 9 all succeed.
+An SDK passes when 7, 8, 9 and 10 all succeed.
+
+## The prose score
+
+`voxgig-docgen qa` answers "is anything forbidden present", which is a pass or
+a fail. It cannot show a release improving or drifting. `bin/prose-score` runs
+the same rules over the same text and returns a number:
+
+```
+weighted = 10 x errors + 3 x warnings + 1 x suggestions
+density  = weighted / (words / 1000)
+score    = max(0, 100 - density)
+```
+
+Every input is pinned, so the same documentation gives the same score on any
+machine: the binary is `@vvago/vale` from this repo's lockfile, the rules are
+the project's own `.sdk/doc/qa/vale.ini` (which pins Google's package by
+release URL, not by name), the text is docgen's own extraction, and every list
+in the output is sorted and every number fixed-precision.
+
+It reports **two scopes**, and the gap between them is the point:
+
+| scope | text | what it measures |
+| --- | --- | --- |
+| `authored` | what docgen hands Vale | the prose docgen **wrote** |
+| `all` | every rendered word, table cells included | the prose a reader **sees** |
+
+`--max-density <n>` turns the score into a gate, read from `all` by default.
+Without it the score is recorded and never fails a run.
 
 ## What `check-docs` asserts
 
@@ -112,6 +142,7 @@ Extra flags go through `ARGS`:
 ```bash
 make smoke ARGS='--only univec'
 make full  ARGS='--targets ts,go --vale'
+make full  ARGS='--max-density 15'      # make the prose score a gate
 ```
 
 `bin/validate-docgen --help` lists every option.
@@ -121,8 +152,14 @@ make full  ARGS='--targets ts,go --vale'
 `node`, `npm` and `git`. Network access to npm and to github.com, unless the
 SDK repos are already cloned into the cache and `--no-fetch` is passed.
 
-Vale is optional. Without `--vale` the QA phase runs `--local-only`, which
-keeps the prose and link checks and skips the Vale pass.
+Vale is optional for the **qa** phase: without `--vale` it runs `--local-only`,
+which keeps the prose and link checks and skips the Vale pass.
+
+Vale is required for the **score** phase, which is why it is a devDependency
+here (`npm install`). If no binary can be found the run stops at startup rather
+than skipping the phase: a phase that vanishes when a dependency is absent
+reports the same clean run as a phase that passed. `--no-score` is the
+explicit opt-out.
 
 ## `--create-sdkgen-path` and `--docgen-path`
 
@@ -172,29 +209,52 @@ Isolation, reproducible with this harness:
 Everything else in the pipeline is sound: the documentation describes the model
 correctly in both configurations, and regenerating is byte-identical.
 
-### The prose gate judges text docgen did not write
+### The prose gate reads a fraction of the documentation
 
-Only `hubspotmarketing` produces QA failures beyond the Slidev link, and it
-produces seven:
+`voxgig-docgen qa` hands Vale the output of docgen's `authored()`, which strips
+table cells. A generated API reference keeps the vendor's schema descriptions
+in exactly those cells, so most of what a reader sees is never linted. The
+score phase measures both scopes, which makes the gap a number:
+
+| SDK | words linted | words rendered | linted |
+| --- | ---: | ---: | ---: |
+| `openfoodfacts` | 2324 | 3431 | 68% |
+| `univec` | 2653 | 3370 | 79% |
+| `hubspotmarketing` | 22509 | 101158 | **22%** |
+
+The gap tracks schema count, because schemas are what fills the tables. At the
+ceiling case Vale reads roughly one word in five.
+
+### The rules judge text docgen did not write
+
+Widening the scope shows why the cells were stripped. Every error the `all`
+scope finds on `hubspotmarketing` is vendor text:
 
 ```
-docs/api/marketing_emails_collection_response_with_total_public_email.html:
-  Avoid: navigat(?:e|es|ed|ing)
-... (7 pages)
+7x Vale.Spelling   legitimate_interest, implicit_consent_to_process, default_group
+4x Google.Spacing  {{ contact.NAME }}
 ```
 
-The banned word is not in any docgen template. It comes from HubSpot's own
-OpenAPI descriptions, which the reference pages carry through:
+None of it is in a docgen template. It is HubSpot's own OpenAPI descriptions,
+carried through to the reference pages:
+
+> Supports types: none, legitimate_interest, explicit_consent_to_process,
+> implicit_consent_to_process.
+
+The same is true of the banned word `navigat(?:e|es|ed|ing)`, which the
+local-only check already reports on seven pages:
 
 > This endpoint supports pagination to **navigate** through large sets of data.
 
-So the prose rules are applied to vendor text as well as to docgen's own, and
-an SDK author cannot satisfy them without editing the upstream specification.
-Whether that is a defect or the intended strictness is a product decision; what
-this harness establishes is that it only bites at scale. Four of the five SDKs
-never hit it, and it took 313 schemas to surface seven instances.
+An SDK author cannot satisfy these rules without editing the upstream
+specification. But the text is not really prose: `legitimate_interest` is an
+enum value and `{{ contact.NAME }}` is a template token, and neither should be
+linted as English in the first place. Stripping the cells hid the symptom at
+the cost of the coverage above; rendering identifiers as code addresses it
+without giving up either.
 
-This is the argument for picking a complexity range rather than a
+Four of the five SDKs never hit this, and it took 313 schemas to surface it.
+That is the argument for picking a complexity range rather than a
 representative sample.
 
 ### The published scaffold did not compile (fixed in create-sdkgen 0.26.0)
@@ -221,6 +281,7 @@ npm, and nothing that tested a checkout would have seen it.
 bin/
   validate-docgen   # main driver (bash)
   check-docs        # documentation assertions (node)
+  prose-score       # deterministic Vale score over the same text (node)
   summarize         # summary.log -> REPORT.md + report.json
   run-to.py         # process-group timeout wrapper
 specs/
@@ -228,6 +289,8 @@ specs/
   smoke.txt         # the two smallest
 test/
   check-docs.test.cjs
+  prose-score.test.cjs
+  summarize.test.cjs
 reports/
   latest/           # the most recent recorded run
 ```

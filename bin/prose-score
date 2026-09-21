@@ -1,0 +1,259 @@
+#!/usr/bin/env node
+/* Copyright (c) 2026 Voxgig Ltd, MIT License */
+
+// A deterministic prose score for one generated SDK's documentation.
+//
+// `voxgig-docgen qa` runs Vale at error level and reports pass or fail. That
+// answers "is anything forbidden present", not "how is the prose doing", and a
+// binary gate cannot show a release improving or drifting. This runs the SAME
+// rules over the SAME text and returns a number.
+//
+// DETERMINISM is the whole point, so every input is pinned:
+//
+//   the binary   @vvago/vale, pinned in this repo's package.json
+//   the rules    the project's own .sdk/doc/qa/vale.ini, which pins the
+//                Google package by release URL rather than by name
+//   the text     docgen's own `authored()` extraction, so the scored text is
+//                byte-identical to what the gate reads
+//   the output   every list sorted, every number fixed-precision
+//
+// Same documentation plus same pins gives the same score on any machine.
+
+const Fs = require('node:fs')
+const Os = require('node:os')
+const Path = require('node:path')
+const { spawnSync } = require('node:child_process')
+
+// An error is a defect, a warning is a smell, a suggestion is an opinion.
+// The ratio matters more than the absolute values: it decides how many
+// suggestions are worth one error, and 10:3:1 keeps a page of suggestions
+// from outweighing a single banned phrase.
+const WEIGHT = { error: 10, warning: 3, suggestion: 1 }
+
+function fail(message) {
+  console.error(message)
+  process.exit(2)
+}
+
+// Resolve docgen's prose extraction from the project being scored, so the
+// score follows the docgen version that produced the documentation rather
+// than whatever this repo happens to have.
+//
+// TWO SCOPES, because docgen's own gate reads two different texts. `runQA`
+// hands Vale `authored()`, which STRIPS table cells, and hands the local
+// banned-phrase check `proseText()`, which keeps them. In a generated API
+// reference the cells are where the vendor's schema descriptions live, so
+// scoring only `authored` measures the half of the documentation docgen
+// wrote and none of the half it carried through.
+//
+//   authored  what Vale actually gates on
+//   all       every rendered word, tables included
+function loadExtractor(root, scope) {
+  const candidate = Path.join(root, '.sdk/node_modules/@voxgig/docgen/dist/qa.js')
+  try {
+    const qa = require(candidate)
+    const fn = 'all' === scope ? qa.proseText : qa.authored
+    if ('function' === typeof fn) return fn
+  } catch (e) { }
+  fail(`cannot load docgen prose extraction from ${candidate}`)
+}
+
+function words(text) {
+  const found = text.match(/[A-Za-z][A-Za-z'-]*/g)
+  return found ? found.length : 0
+}
+
+function round(n, places = 1) {
+  const factor = Math.pow(10, places)
+  return Math.round(n * factor) / factor
+}
+
+// Density, not score, is the gate: it is the raw measurement, and a score
+// floored at zero cannot distinguish bad from far worse. An absent or
+// unparseable maximum must REFUSE rather than wave the run through, which is
+// the failure mode a numeric comparison against NaN produces silently.
+function gate(result, max) {
+  if (undefined === max || null === max || '' === max) return { ok: true }
+  const limit = Number(max)
+  if (!Number.isFinite(limit)) {
+    return { ok: false, reason: `--max-density is not a number: ${max}` }
+  }
+  if (!Number.isFinite(result?.density)) {
+    return { ok: false, reason: 'no density was measured' }
+  }
+  if (result.density > limit) {
+    return { ok: false, reason: `density ${result.density} exceeds --max-density ${limit}` }
+  }
+  return { ok: true }
+}
+
+function valeBinary(explicit) {
+  if (explicit) return explicit
+  const local = Path.resolve(__dirname, '..', 'node_modules/@vvago/vale/bin/vale')
+  if (Fs.existsSync(local)) return local
+  return 'vale'
+}
+
+function score(root, options = {}) {
+  const manifestPath = Path.join(root, '.sdk/doc/qa-manifest.json')
+  if (!Fs.existsSync(manifestPath)) fail(`no QA manifest at ${manifestPath}`)
+  const manifest = JSON.parse(Fs.readFileSync(manifestPath, 'utf8'))
+  if (!Array.isArray(manifest.files) || !manifest.files.length) fail('QA manifest lists no files')
+
+  const config = Path.resolve(root, options.config || manifest.config)
+  if (!Fs.existsSync(config)) fail(`no Vale config at ${config}`)
+  const vale = valeBinary(options.vale)
+
+  // The Google package is pinned by URL in the config, so a sync fetches
+  // exactly one known release. Without it Vale reports every Google rule as
+  // missing and the score silently measures the house rules alone.
+  if (!options.noSync) {
+    const sync = spawnSync(vale, ['--config=' + config, 'sync'], { encoding: 'utf8' })
+    if (0 !== sync.status) {
+      fail('vale sync failed: ' + ((sync.stderr || sync.stdout || sync.error?.message || '').trim()))
+    }
+  }
+
+  const scope = 'all' === options.scope ? 'all' : 'authored'
+  const extract = loadExtractor(root, scope)
+  const temp = Fs.mkdtempSync(Path.join(Os.tmpdir(), 'prose-score-'))
+  const inputs = [], byFile = new Map()
+  let total = 0
+
+  try {
+    // Index-named temp files, exactly as runQA does, so a path is mapped back
+    // by position rather than by a name that could collide.
+    for (const [index, file] of manifest.files.entries()) {
+      const full = Path.resolve(root, file)
+      if (!Fs.existsSync(full)) fail(`manifest names a file that does not exist: ${file}`)
+      const text = Fs.readFileSync(full, 'utf8')
+      const format = file.endsWith('.html') ? 'html' : file.endsWith('.vue') ? 'vue' : 'md'
+      const prose = extract(text, format)
+      const dest = Path.join(temp, index + '.txt')
+      Fs.writeFileSync(dest, prose)
+      inputs.push(dest)
+      byFile.set(dest, file)
+      total += words(prose)
+    }
+
+    const run = spawnSync(vale,
+      ['--config=' + config, '--minAlertLevel=suggestion', '--output=JSON', ...inputs],
+      { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 })
+
+    // Vale exits non-zero when it reports anything at or above the config's
+    // own MinAlertLevel. That is a finding, not a failure to run, so only a
+    // missing or unparseable payload is fatal here.
+    let payload
+    try { payload = JSON.parse(run.stdout || '{}') } catch (e) {
+      fail('vale produced no parseable JSON: ' + ((run.stderr || run.stdout || '').trim().slice(0, 400)))
+    }
+
+    const counts = { error: 0, warning: 0, suggestion: 0 }
+    const rules = new Map(), files = new Map()
+    for (const [dest, alerts] of Object.entries(payload)) {
+      const file = byFile.get(Path.resolve(dest)) || byFile.get(dest) || dest
+      for (const alert of alerts || []) {
+        const severity = String(alert.Severity || '').toLowerCase()
+        if (!(severity in counts)) continue
+        counts[severity]++
+        const check = String(alert.Check || 'unknown')
+        const rule = rules.get(check) || { check, error: 0, warning: 0, suggestion: 0 }
+        rule[severity]++
+        rules.set(check, rule)
+        const entry = files.get(file) || { file, error: 0, warning: 0, suggestion: 0 }
+        entry[severity]++
+        files.set(file, entry)
+      }
+    }
+
+    const weighted = WEIGHT.error * counts.error
+      + WEIGHT.warning * counts.warning
+      + WEIGHT.suggestion * counts.suggestion
+    // Per 1000 words, so a large API's documentation is comparable with a
+    // small one's. Without it every score is really a size measurement.
+    const density = 0 === total ? 0 : round(weighted / (total / 1000))
+    const value = round(Math.max(0, 100 - density))
+
+    const weigh = r => WEIGHT.error * r.error + WEIGHT.warning * r.warning + WEIGHT.suggestion * r.suggestion
+    const bySeverityThenName = (a, b) => weigh(b) - weigh(a) || a.check.localeCompare(b.check)
+
+    return {
+      root,
+      scope,
+      config: Path.relative(root, config) || config,
+      vale: (spawnSync(vale, ['--version'], { encoding: 'utf8' }).stdout || '').trim(),
+      files: manifest.files.length,
+      words: total,
+      alerts: counts,
+      weighted,
+      density,
+      score: value,
+      rules: [...rules.values()].sort(bySeverityThenName),
+      worstFiles: [...files.values()]
+        .sort((a, b) => weigh(b) - weigh(a) || a.file.localeCompare(b.file))
+        .slice(0, 10),
+    }
+  } finally {
+    Fs.rmSync(temp, { recursive: true, force: true })
+  }
+}
+
+// Flags take a value, switches do not. Scanning the list once is the only
+// way to tell the bare ROOT from a flag's value: `indexOf` on a value finds
+// its FIRST occurrence, so two flags given the same value made one of them
+// swallow the root.
+const FLAGS = ['--config', '--vale', '--scope', '--max-density']
+const SWITCHES = ['--json', '--no-sync']
+
+function parseArgs(argv) {
+  const options = {}, rest = []
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]
+    if (FLAGS.includes(arg)) {
+      if (i + 1 >= argv.length) fail(`${arg} needs a value`)
+      options[arg] = argv[++i]
+    }
+    else if (SWITCHES.includes(arg)) options[arg] = true
+    else if (arg.startsWith('--')) fail(`unknown option: ${arg}`)
+    else rest.push(arg)
+  }
+  if (rest.length > 1) fail(`expected one project root, got ${rest.length}: ${rest.join(' ')}`)
+  return { options, root: rest[0] || '.' }
+}
+
+function main() {
+  const { options: opt, root: given } = parseArgs(process.argv.slice(2))
+  const root = Path.resolve(given)
+  const args = { json: true === opt['--json'] }
+
+  const result = score(root, {
+    config: opt['--config'],
+    vale: opt['--vale'],
+    scope: opt['--scope'],
+    noSync: true === opt['--no-sync'],
+  })
+
+  if (args.json) {
+    process.stdout.write(JSON.stringify(result, null, 2) + '\n')
+  } else {
+    console.log(`prose score ${result.score}/100   density ${result.density} weighted alerts per 1000 words`)
+    console.log(`  scope ${result.scope}, ${result.words} words over ${result.files} files, ${result.vale}`)
+    console.log(`  config ${result.config}`)
+    console.log(`  errors ${result.alerts.error}  warnings ${result.alerts.warning}  suggestions ${result.alerts.suggestion}`)
+    if (result.rules.length) {
+      console.log('  rules:')
+      for (const rule of result.rules.slice(0, 12)) {
+        console.log(`    ${rule.check}: ${rule.error}E ${rule.warning}W ${rule.suggestion}S`)
+      }
+    }
+  }
+
+  const verdict = gate(result, opt['--max-density'])
+  if (!verdict.ok) {
+    console.error(verdict.reason)
+    process.exitCode = 1
+  }
+}
+
+if (require.main === module) main()
+module.exports = { score, gate, parseArgs, WEIGHT, words, round }

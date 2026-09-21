@@ -6,7 +6,9 @@
 const Fs = require('node:fs')
 const Path = require('node:path')
 
-const PHASES = ['fetch', 'scaffold', 'build', 'generate', 'check', 'qa', 'rerun']
+const PHASES = ['fetch', 'scaffold', 'build', 'generate', 'check', 'qa', 'score', 'rerun']
+const SCOPES = ['authored', 'all']
+const METRICS = ['score', 'density', 'words', 'errors', 'warnings', 'suggestions']
 
 function parse(text) {
   const config = {}, sdks = {}, order = []
@@ -23,7 +25,7 @@ function parse(text) {
     // An SDK name may contain characters `\w` does not cover (a hyphen, say),
     // so the name is matched against the names `sdk=` already announced rather
     // than by a character class that silently drops those records.
-    if ((match = line.match(/^(.+?)_(fetch|scaffold|overlay|build|generate|check|qa|rerun)_rc=(-?\d+)$/))) {
+    if ((match = line.match(/^(.+?)_(fetch|scaffold|overlay|build|generate|check|qa|score|rerun)_rc=(-?\d+)$/))) {
       const sdk = sdks[match[1]]; if (sdk) { sdk[match[2] + '_rc'] = Number(match[3]); continue }
     }
     if ((match = line.match(/^(.+?)_(target|edition)_(.+)_rc=(-?\d+)$/))) {
@@ -31,6 +33,18 @@ function parse(text) {
       if (sdk) {
         sdk[match[2] + 's'] = sdk[match[2] + 's'] || {}
         sdk[match[2] + 's'][match[3]] = Number(match[4])
+        continue
+      }
+    }
+    // Prose metrics are recorded per scope, so `_rc` above must be matched
+    // first: `score` is both a phase and a metric name.
+    if ((match = line.match(new RegExp(
+      `^(.+?)_(${METRICS.join('|')})_(${SCOPES.join('|')})=(-?[\\d.]+)$`)))) {
+      const sdk = sdks[match[1]]
+      if (sdk) {
+        sdk.prose = sdk.prose || {}
+        sdk.prose[match[3]] = sdk.prose[match[3]] || {}
+        sdk.prose[match[3]][match[2]] = Number(match[4])
         continue
       }
     }
@@ -52,6 +66,38 @@ function table(data) {
     return `| ${sdk.name} | ${cells.join(' | ')} | ${checks} |`
   })
   return [head, rule, ...rows]
+}
+
+// The two scopes side by side, because the GAP is the finding. `authored`
+// is the text docgen's own gate reads; `all` is every rendered word. A wide
+// gap in words means most of the documentation is never linted at all.
+function proseTable(data) {
+  const scored = data.sdks.filter(sdk => sdk.prose)
+  if (!scored.length) return []
+  const cell = (sdk, scope, key) => {
+    const at = sdk.prose[scope]
+    return at && undefined !== at[key] ? String(at[key]) : '-'
+  }
+  return [
+    '## Prose score',
+    '',
+    'Weighted alerts per 1000 words, over the project\'s own pinned Vale rules.',
+    'Score is 100 minus that density, floored at zero. `authored` is the text',
+    'the documentation gate reads; `all` adds the table cells it strips, which',
+    'is where a vendor specification\'s own descriptions land.',
+    '',
+    '| SDK | authored score | authored words | authored E/W/S | all score | all words | all E/W/S |',
+    '| --- | --- | --- | --- | --- | --- | --- |',
+    ...scored.map(sdk => {
+      const cells = SCOPES.flatMap(scope => [
+        cell(sdk, scope, 'score'),
+        cell(sdk, scope, 'words'),
+        ['errors', 'warnings', 'suggestions'].map(k => cell(sdk, scope, k)).join('/'),
+      ])
+      return `| ${sdk.name} | ${cells.join(' | ')} |`
+    }),
+    '',
+  ]
 }
 
 function main() {
@@ -76,6 +122,8 @@ function main() {
     `- Targets: \`${data.config.targets || '?'}\``,
     `- Editions: \`${data.config.editions || '?'}\``,
     `- Text QA: ${data.config.qa || '?'} (Vale ${data.config.vale || '?'})`,
+    `- Prose score: ${data.config.score || '?'}` +
+      (data.config.max_density ? ` (gate: density <= ${data.config.max_density})` : ' (measured, not gated)'),
     `- Byte-stability rerun: ${data.config.rerun || '?'}`,
     '',
     `**${passed}/${total} SDKs fully validated.**`,
@@ -85,6 +133,7 @@ function main() {
     '',
     ...table(data),
     '',
+    ...proseTable(data),
     '## Per-SDK detail',
     '',
   ]
@@ -102,11 +151,19 @@ function main() {
     if (undefined !== sdk.checks_total) {
       lines.push(`- documentation checks: ${sdk.checks_pass}/${sdk.checks_total}`)
     }
+    for (const scope of SCOPES) {
+      const at = sdk.prose?.[scope]
+      if (!at) continue
+      lines.push(`- prose (${scope}): score ${at.score}, density ${at.density} over ` +
+        `${at.words} words, ${at.errors}E ${at.warnings}W ${at.suggestions}S`)
+    }
     // Absent is "not reached", never "passed": the driver abandons an SDK at
     // its first failure, so the phases after it have no record at all. Saying
     // "all phases clean" for a run that stopped early would invert that.
     const expected = PHASES.filter(p =>
-      !('qa' === p && 'off' === data.config.qa) && !('rerun' === p && 'off' === data.config.rerun))
+      !('qa' === p && 'off' === data.config.qa) &&
+      !('score' === p && 'off' === data.config.score) &&
+      !('rerun' === p && 'off' === data.config.rerun))
     const failed = expected.filter(p => undefined !== sdk[p + '_rc'] && 0 !== sdk[p + '_rc'])
     const absent = expected.filter(p => undefined === sdk[p + '_rc'])
     if (failed.length) lines.push(`- failed phases: ${failed.join(', ')}`)

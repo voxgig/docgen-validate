@@ -1,0 +1,191 @@
+#!/usr/bin/env node
+/* Copyright (c) 2026 Voxgig Ltd, MIT License */
+
+// Turn a run's summary.log into REPORT.md and report.json.
+
+const Fs = require('node:fs')
+const Path = require('node:path')
+
+const PHASES = ['fetch', 'scaffold', 'build', 'generate', 'deck', 'check', 'qa', 'score', 'rerun']
+const SCOPES = ['authored', 'all']
+const METRICS = ['score', 'density', 'words', 'errors', 'warnings', 'suggestions']
+
+function parse(text) {
+  const config = {}, sdks = {}, order = []
+  for (const line of text.split('\n')) {
+    let match
+    if ((match = line.match(/^config (\w+)=(.*)$/))) { config[match[1]] = match[2]; continue }
+    if ((match = line.match(/^result passed=(\d+) total=(\d+)$/))) {
+      config.passed = Number(match[1]); config.total = Number(match[2]); continue
+    }
+    if ((match = line.match(/^sdk=(\S+) repo=(\S+) spec=(\S+)$/))) {
+      if (!sdks[match[1]]) { sdks[match[1]] = { name: match[1], repo: match[2], spec: match[3] }; order.push(match[1]) }
+      continue
+    }
+    // An SDK name may contain characters `\w` does not cover (a hyphen, say),
+    // so the name is matched against the names `sdk=` already announced rather
+    // than by a character class that silently drops those records.
+    if ((match = line.match(/^(.+?)_(fetch|scaffold|overlay|build|generate|deck|check|qa|score|rerun)_rc=(-?\d+)$/))) {
+      const sdk = sdks[match[1]]; if (sdk) { sdk[match[2] + '_rc'] = Number(match[3]); continue }
+    }
+    if ((match = line.match(/^(.+?)_(target|edition)_(.+)_rc=(-?\d+)$/))) {
+      const sdk = sdks[match[1]]
+      if (sdk) {
+        sdk[match[2] + 's'] = sdk[match[2] + 's'] || {}
+        sdk[match[2] + 's'][match[3]] = Number(match[4])
+        continue
+      }
+    }
+    // Prose metrics are recorded per scope, so `_rc` above must be matched
+    // first: `score` is both a phase and a metric name.
+    if ((match = line.match(new RegExp(
+      `^(.+?)_(${METRICS.join('|')})_(${SCOPES.join('|')})=(-?[\\d.]+)$`)))) {
+      const sdk = sdks[match[1]]
+      if (sdk) {
+        sdk.prose = sdk.prose || {}
+        sdk.prose[match[3]] = sdk.prose[match[3]] || {}
+        sdk.prose[match[3]][match[2]] = Number(match[4])
+        continue
+      }
+    }
+    if ((match = line.match(/^(.+?)_checks_(pass|total)=(\d+)$/))) {
+      const sdk = sdks[match[1]]; if (sdk) { sdk['checks_' + match[2]] = Number(match[3]); continue }
+    }
+  }
+  return { config, sdks: order.map(n => sdks[n]) }
+}
+
+const mark = rc => undefined === rc ? '-' : 0 === rc ? 'ok' : 'FAIL'
+
+function table(data) {
+  const head = '| SDK | ' + PHASES.join(' | ') + ' | doc checks |'
+  const rule = '| --- |' + PHASES.map(() => ' --- |').join('') + ' --- |'
+  const rows = data.sdks.map(sdk => {
+    const cells = PHASES.map(p => mark(sdk[p + '_rc']))
+    const checks = undefined === sdk.checks_total ? '-' : `${sdk.checks_pass}/${sdk.checks_total}`
+    return `| ${sdk.name} | ${cells.join(' | ')} | ${checks} |`
+  })
+  return [head, rule, ...rows]
+}
+
+// The two scopes side by side, because the GAP is the finding. `authored`
+// is the text docgen's own gate reads; `all` is every rendered word. A wide
+// gap in words means most of the documentation is never linted at all.
+function proseTable(data) {
+  const scored = data.sdks.filter(sdk => sdk.prose)
+  if (!scored.length) return []
+  const cell = (sdk, scope, key) => {
+    const at = sdk.prose[scope]
+    return at && undefined !== at[key] ? String(at[key]) : '-'
+  }
+  return [
+    '## Prose score',
+    '',
+    'Weighted alerts per 1000 words, over the project\'s own pinned Vale rules.',
+    'Score is 100 minus that density, floored at zero. `all` is every rendered',
+    'word, table cells included, which is where a vendor specification\'s own',
+    'descriptions land. `authored` is the narrower text, docgen\'s own prose.',
+    '',
+    '| SDK | authored score | authored words | authored E/W/S | all score | all words | all E/W/S |',
+    '| --- | --- | --- | --- | --- | --- | --- |',
+    ...scored.map(sdk => {
+      const cells = SCOPES.flatMap(scope => [
+        cell(sdk, scope, 'score'),
+        cell(sdk, scope, 'words'),
+        ['errors', 'warnings', 'suggestions'].map(k => cell(sdk, scope, k)).join('/'),
+      ])
+      return `| ${sdk.name} | ${cells.join(' | ')} |`
+    }),
+    '',
+  ]
+}
+
+function main() {
+  const args = process.argv.slice(2)
+  const at = args.indexOf('--run-dir')
+  if (at < 0) { console.error('usage: summarize --run-dir <dir>'); process.exit(2) }
+  const runDir = Path.resolve(args[at + 1])
+  const summary = Path.join(runDir, 'summary.log')
+  if (!Fs.existsSync(summary)) { console.error('no summary.log in ' + runDir); process.exit(2) }
+
+  const data = parse(Fs.readFileSync(summary, 'utf8'))
+  const passed = data.config.passed ?? 0
+  const total = data.config.total ?? data.sdks.length
+
+  const lines = [
+    '# docgen-validate run',
+    '',
+    `Run: \`${Path.basename(runDir)}\``,
+    '',
+    `- Started: ${data.config.started || '?'}`,
+    `- Finished: ${data.config.finished || '?'}`,
+    `- Targets: \`${data.config.targets || '?'}\``,
+    `- Editions: \`${data.config.editions || '?'}\``,
+    `- Text QA: ${data.config.qa || '?'} (Vale ${data.config.vale || '?'})`,
+    `- Presentation decks: ${data.config.decks || '?'}`,
+    `- Prose score: ${data.config.score || '?'}` +
+      (data.config.max_density ? ` (gate: density <= ${data.config.max_density})` : ' (measured, not gated)'),
+    `- Byte-stability rerun: ${data.config.rerun || '?'}`,
+    // A run against a checkout does not say anything about the published
+    // tool, and a report that omits which one it used invites that reading.
+    ...(data.config.docgen_path ?
+      [`- **Docgen: local checkout \`${data.config.docgen_path}\`, not the published package.**`] : []),
+    ...(data.config.create_sdkgen_path ?
+      [`- **create-sdkgen: local checkout \`${data.config.create_sdkgen_path}\`.**`] : []),
+    '',
+    `**${passed}/${total} SDKs fully validated.**`,
+    '',
+    'An SDK passes when the deck build, the documentation checks, the text QA',
+    'gate, the prose score and the byte-stability rerun all succeed.',
+    '',
+    ...table(data),
+    '',
+    ...proseTable(data),
+    '## Per-SDK detail',
+    '',
+  ]
+
+  for (const sdk of data.sdks) {
+    lines.push(`### ${sdk.name}`)
+    lines.push('')
+    lines.push(`Source: \`${sdk.repo}\`, spec \`${sdk.spec}\``)
+    lines.push('')
+    for (const kind of ['targets', 'editions']) {
+      if (!sdk[kind]) continue
+      const entries = Object.entries(sdk[kind]).map(([k, v]) => `${k}=${mark(v)}`)
+      lines.push(`- ${kind}: ${entries.join(', ')}`)
+    }
+    if (undefined !== sdk.checks_total) {
+      lines.push(`- documentation checks: ${sdk.checks_pass}/${sdk.checks_total}`)
+    }
+    for (const scope of SCOPES) {
+      const at = sdk.prose?.[scope]
+      if (!at) continue
+      lines.push(`- prose (${scope}): score ${at.score}, density ${at.density} over ` +
+        `${at.words} words, ${at.errors}E ${at.warnings}W ${at.suggestions}S`)
+    }
+    // Absent is "not reached", never "passed": the driver abandons an SDK at
+    // its first failure, so the phases after it have no record at all. Saying
+    // "all phases clean" for a run that stopped early would invert that.
+    const expected = PHASES.filter(p =>
+      !('qa' === p && 'off' === data.config.qa) &&
+      !('deck' === p && 'off' === data.config.decks) &&
+      !('score' === p && 'off' === data.config.score) &&
+      !('rerun' === p && 'off' === data.config.rerun))
+    const failed = expected.filter(p => undefined !== sdk[p + '_rc'] && 0 !== sdk[p + '_rc'])
+    const absent = expected.filter(p => undefined === sdk[p + '_rc'])
+    if (failed.length) lines.push(`- failed phases: ${failed.join(', ')}`)
+    if (absent.length) lines.push(`- phases not reached: ${absent.join(', ')}`)
+    if (!failed.length && !absent.length) lines.push('- all phases clean')
+    lines.push('')
+  }
+
+  Fs.writeFileSync(Path.join(runDir, 'REPORT.md'), lines.join('\n'))
+  Fs.writeFileSync(Path.join(runDir, 'report.json'),
+    JSON.stringify({ config: data.config, sdks: data.sdks }, null, 2) + '\n')
+  console.log(`wrote ${Path.join(runDir, 'REPORT.md')}`)
+  console.log(`wrote ${Path.join(runDir, 'report.json')}`)
+}
+
+if (require.main === module) main()
+module.exports = { parse }

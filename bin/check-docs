@@ -1,0 +1,228 @@
+#!/usr/bin/env node
+/* Copyright (c) 2026 Voxgig Ltd, MIT License */
+
+// Documentation assertions for one generated SDK.
+//
+// `voxgig-docgen qa` already covers prose, broken local links and missing
+// anchors. This covers what it cannot see: whether the documentation
+// DESCRIBES THE MODEL. A page that reads perfectly and links correctly is
+// still wrong if it omits an entity, and qa cannot tell, because the manifest
+// it reads is generated from the same run.
+//
+// Exit 0 when every check passes, 1 otherwise. --json prints the result for
+// the summarizer; without it the output is a readable list.
+
+const Fs = require('node:fs')
+const Path = require('node:path')
+
+const PLACEHOLDERS = ['ProjectName', 'PROJECTENV', 'PROJECTVERSION', 'PROJECTDESC']
+const GUIDES = ['authentication', 'concepts', 'errors', 'first-call']
+const MIN_BYTES = 200
+
+function read(file) {
+  try { return Fs.readFileSync(file, 'utf8') } catch (e) { return null }
+}
+
+// A presentation edition is a Slidev project, so building it (which the
+// generated workflow does before qa, and so does this harness) drops a
+// toolchain and its build output inside the documentation tree. Neither is
+// documentation: a dependency's README is a stub, its bundled pages have no
+// title, and one of them contains a literal $$ref$$.
+const NOT_DOCUMENTATION = new Set(['node_modules', 'dist'])
+
+function walk(dir, out = []) {
+  let entries
+  try { entries = Fs.readdirSync(dir, { withFileTypes: true }) } catch (e) { return out }
+  for (const entry of entries) {
+    const full = Path.join(dir, entry.name)
+    if (entry.isDirectory()) { if (!NOT_DOCUMENTATION.has(entry.name)) walk(full, out) }
+    else out.push(full)
+  }
+  return out
+}
+
+// The model's own account of what the documentation must cover. Editions are
+// read from the model rather than assumed, so a project that installs only
+// some of them is checked against what it actually declares.
+function survey(model) {
+  const kit = model.main.kit
+  const entities = Object.entries(kit.entity || {}).filter(([, e]) => false !== e.active)
+  const targets = Object.entries(kit.target || {}).filter(([, t]) => false !== t.active)
+  const features = Object.entries(kit.feature || {}).filter(([, f]) => false !== f.active)
+  const editions = Object.entries((kit.doc || {}).edition || {})
+    .filter(([, d]) => false !== d.active)
+    .map(([name, d]) => ({ name, path: (d.output || {}).path }))
+  let routes = 0
+  for (const [, entity] of entities) {
+    for (const op of Object.values(entity.op || {})) routes += (op.points || []).length
+  }
+  return {
+    entities: entities.map(([name]) => name),
+    targets: targets.map(([name]) => name),
+    features: features.map(([name]) => name),
+    editions,
+    routes,
+  }
+}
+
+// An edition's output path is a file for `summary` and a directory for the
+// others, so presence is "something substantial is there", not a stat.
+function editionOutput(root, edition) {
+  const full = Path.join(root, edition.path || '')
+  if (!Fs.existsSync(full)) return { ok: false, detail: 'missing: ' + edition.path }
+  if (Fs.statSync(full).isDirectory()) {
+    const files = walk(full).filter(f => /\.(html|md|vue)$/.test(f))
+    const bytes = files.reduce((n, f) => n + (Fs.statSync(f).size), 0)
+    return { ok: files.length > 0 && bytes >= MIN_BYTES, detail: `${files.length} pages, ${bytes} bytes` }
+  }
+  const size = Fs.statSync(full).size
+  return { ok: size >= MIN_BYTES, detail: `${size} bytes` }
+}
+
+function checkDocs(root) {
+  const checks = []
+  const ok = (name, pass, detail) => checks.push({ name, pass: !!pass, detail: detail || '' })
+
+  const model = JSON.parse(read(Path.join(root, '.sdk/model/sdk.json')) || 'null')
+  if (!model) {
+    ok('model compiled', false, '.sdk/model/sdk.json is missing')
+    return { checks, survey: null }
+  }
+  const want = survey(model)
+
+  // 1. Every ACTIVE edition emits at its declared output path.
+  ok('the model declares at least one edition', want.editions.length > 0,
+    want.editions.map(e => e.name).join(',') || 'none')
+  for (const edition of want.editions) {
+    const result = editionOutput(root, edition)
+    ok(`edition ${edition.name} emits ${edition.path}`, result.ok, result.detail)
+  }
+  const summaryPath = Path.join(root, 'SUMMARY.md')
+  const summary = read(summaryPath)
+
+  // The page set below belongs to the github-pages edition. A project that
+  // installs only `summary` emits no docs/ tree at all, and asserting against
+  // it would fail a correctly generated project.
+  const pages = want.editions.find(e => 'github-pages' === e.name)
+  const hasSummary = want.editions.some(e => 'summary' === e.name)
+
+  if (pages) {
+    // 2. One API page per active entity, and no page for an entity the model
+    //    does not have. An extra page is as wrong as a missing one: it means
+    //    the docs describe an endpoint the SDK will not expose.
+    const apiDir = Path.join(root, 'docs/api')
+    const apiPages = walk(apiDir).map(f => Path.basename(f, '.html'))
+      .filter(n => n !== 'index' && !n.endsWith('.html'))
+    const missingEntities = want.entities.filter(e => !apiPages.includes(e))
+    const extraEntities = apiPages.filter(p => !want.entities.includes(p))
+    ok('every active entity has an API page', 0 === missingEntities.length,
+      missingEntities.length ? 'missing: ' + missingEntities.join(',') : `${want.entities.length} entities`)
+    ok('no API page without an entity', 0 === extraEntities.length,
+      extraEntities.length ? 'extra: ' + extraEntities.join(',') : '')
+
+    // 3. One SDK page per active target.
+    const sdkPages = walk(Path.join(root, 'docs/sdks')).map(f => Path.basename(f, '.html'))
+      .filter(n => n !== 'index')
+    const missingTargets = want.targets.filter(t => !sdkPages.includes(t))
+    ok('every active target has an SDK page', 0 === missingTargets.length,
+      missingTargets.length ? 'missing: ' + missingTargets.join(',') : `${want.targets.length} targets`)
+
+    // 4. One feature page per active feature.
+    const featurePages = walk(Path.join(root, 'docs/features')).map(f => Path.basename(f, '.html'))
+      .filter(n => n !== 'index')
+    const missingFeatures = want.features.filter(f => !featurePages.includes(f))
+    ok('every active feature has a page', 0 === missingFeatures.length,
+      missingFeatures.length ? 'missing: ' + missingFeatures.join(',') : `${want.features.length} features`)
+
+    // 5. The standing guides are present.
+    const missingGuides = GUIDES.filter(g => !Fs.existsSync(Path.join(root, 'docs/guides', g + '.html')))
+    ok('the guide set is complete', 0 === missingGuides.length,
+      missingGuides.length ? 'missing: ' + missingGuides.join(',') : `${GUIDES.length} guides`)
+  }
+
+  // 6. The summary's own counts agree with the model. This is the check that
+  //    catches a doc built from a stale model: the pages all exist and read
+  //    correctly, and the numbers describe a different API.
+  if (hasSummary && summary) {
+    const counted = summary.match(/contains\s+(\d+)\s+entities\s+and\s+(\d+)\s+HTTP routes/i)
+    ok('summary entity and route counts match the model',
+      counted && Number(counted[1]) === want.entities.length && Number(counted[2]) === want.routes,
+      counted
+        ? `summary says ${counted[1]}/${counted[2]}, model has ${want.entities.length}/${want.routes}`
+        : 'no count sentence found')
+    const named = want.entities.filter(e => !summary.includes(e))
+    ok('summary names every entity', 0 === named.length,
+      named.length ? 'unnamed: ' + named.join(',') : '')
+  }
+
+  // 7. No placeholder survives into published text. `$$ref$$` is jostraca's
+  //    own interpolation marker, so one left in the output means a template
+  //    was copied without its model.
+  const docFiles = walk(Path.join(root, 'docs')).filter(f => /\.(html|md|vue)$/.test(f))
+  if (summary) docFiles.push(summaryPath)
+  const leaked = []
+  for (const file of docFiles) {
+    const text = read(file) || ''
+    for (const placeholder of PLACEHOLDERS) {
+      if (text.includes(placeholder)) leaked.push(Path.relative(root, file) + ':' + placeholder)
+    }
+    if (/\$\$[\w.]+\$\$/.test(text)) leaked.push(Path.relative(root, file) + ':$$ref$$')
+  }
+  ok('no placeholder leaks into the documentation', 0 === leaked.length,
+    leaked.length ? leaked.slice(0, 5).join(' ') : `${docFiles.length} files scanned`)
+
+  // 8. Every emitted page carries a title, and none is a stub.
+  const untitled = [], stubs = []
+  for (const file of docFiles) {
+    const text = read(file) || ''
+    if (text.length < MIN_BYTES) stubs.push(Path.relative(root, file))
+    if (file.endsWith('.html') && !/<title>[^<]+<\/title>/i.test(text)) untitled.push(Path.relative(root, file))
+  }
+  ok('every HTML page has a title', 0 === untitled.length,
+    untitled.length ? untitled.slice(0, 5).join(' ') : '')
+  ok('no page is a stub', 0 === stubs.length,
+    stubs.length ? stubs.slice(0, 5).join(' ') : `min ${MIN_BYTES} bytes`)
+
+  // 9. The QA manifest is the list `voxgig-docgen qa` reads. A page missing
+  //    from it is a page QA never opens, so the manifest going stale silently
+  //    narrows the gate.
+  let manifest = null
+  try { manifest = JSON.parse(read(Path.join(root, '.sdk/doc/qa-manifest.json')) || 'null') } catch (e) { }
+  const readable = !!(manifest && Array.isArray(manifest.files))
+  ok('QA manifest is readable', readable,
+    readable ? `${manifest.files.length} entries` : '.sdk/doc/qa-manifest.json missing or malformed')
+  if (readable) {
+    const absent = manifest.files.filter(f => !Fs.existsSync(Path.join(root, f)))
+    ok('every manifest entry exists', 0 === absent.length,
+      absent.length ? absent.slice(0, 5).join(' ') : `${manifest.files.length} entries`)
+    const listed = new Set(manifest.files)
+    const prose = docFiles
+      .map(f => Path.relative(root, f).split(Path.sep).join('/'))
+      .filter(f => /\.(html|md)$/.test(f) && !f.startsWith('docs/slidev/'))
+    const unlisted = prose.filter(f => !listed.has(f))
+    ok('every emitted page is in the QA manifest', 0 === unlisted.length,
+      unlisted.length ? unlisted.slice(0, 5).join(' ') : `${prose.length} pages`)
+  }
+
+  return { checks, survey: want }
+}
+
+function main() {
+  const args = process.argv.slice(2)
+  const json = args.includes('--json')
+  const root = Path.resolve(args.find(a => !a.startsWith('--')) || '.')
+  const { checks, survey: want } = checkDocs(root)
+  const failed = checks.filter(c => !c.pass)
+  if (json) {
+    process.stdout.write(JSON.stringify({ root, survey: want, checks, failed: failed.length }, null, 2) + '\n')
+  } else {
+    for (const check of checks) {
+      console.log((check.pass ? 'ok   ' : 'FAIL ') + check.name + (check.detail ? '  [' + check.detail + ']' : ''))
+    }
+    console.log(`${checks.length - failed.length}/${checks.length} documentation checks passed`)
+  }
+  process.exitCode = failed.length ? 1 : 0
+}
+
+if (require.main === module) main()
+module.exports = { checkDocs, survey }

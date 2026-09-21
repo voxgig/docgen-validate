@@ -252,20 +252,29 @@ fi
 # phase that vanishes when a dependency is absent reports the same clean run
 # as a phase that passed.
 VALE_BIN=""
-if [ "${NO_SCORE}" = 0 ]; then
+if [ "${NO_SCORE}" = 0 ] || [ "${VALE}" = 1 ]; then
   if [ -x "${REPO_DIR}/node_modules/@vvago/vale/bin/vale" ]; then
     VALE_BIN="${REPO_DIR}/node_modules/@vvago/vale/bin/vale"
   elif command -v vale >/dev/null 2>&1; then
     VALE_BIN="$(command -v vale)"
   else
     echo "ERROR: no vale binary found." >&2
-    echo "       Run 'npm install' in ${REPO_DIR}, or pass --no-score." >&2
+    echo "       Run 'npm install' in ${REPO_DIR}, or pass --no-score (and drop --vale)." >&2
     exit 2
   fi
+  # docgen's qa spawns a BARE `vale`, so an installed-but-unreachable binary
+  # fails the phase with ENOENT before it lints a single word - which reads
+  # exactly like a prose failure in the log.
+  PATH="$(dirname "${VALE_BIN}"):${PATH}"
+  export PATH
   case "${SCORE_SCOPE}" in
     ''|authored|all) ;;
     *) echo "ERROR: --score-scope must be 'authored' or 'all'" >&2; exit 2;;
   esac
+fi
+if [ "${VALE}" = 1 ] && ! command -v vale >/dev/null 2>&1; then
+  echo "ERROR: --vale needs vale on PATH for docgen's qa phase" >&2
+  exit 2
 fi
 
 # Digest exactly what docgen says it generated, not a walk of docs/. The walk
@@ -461,7 +470,19 @@ while IFS= read -r line || [ -n "${line}" ]; do
   if [ "${NO_QA}" = 0 ]; then
     say ">> [${name}] qa"
     qa_args=""
-    [ "${VALE}" = 1 ] || qa_args="--local-only"
+    if [ "${VALE}" = 1 ]; then
+      # The workflow installs the pinned rules in a step of its own before it
+      # runs qa. Without it Vale stops on "style 'Google' does not exist",
+      # which lands in the qa log looking like a prose failure.
+      run_with_timeout "${QA_TIMEOUT}" "${VALE_BIN}" \
+        --config="${folder}/.sdk/doc/qa/vale.ini" sync >> "${log_base}.qa.log" 2>&1 || {
+          say "!! [${name}] vale sync FAILED"
+          echo "${name}_qa_rc=1" >> "${SUMMARY}"
+          continue
+        }
+    else
+      qa_args="--local-only"
+    fi
     (cd "${folder}" && run_with_timeout "${QA_TIMEOUT}" \
       node "${folder}/.sdk/node_modules/@voxgig/docgen/bin/voxgig-docgen" qa ${qa_args}) \
       > "${log_base}.qa.log" 2>&1

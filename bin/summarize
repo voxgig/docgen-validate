@@ -82,9 +82,9 @@ function proseTable(data) {
     '## Prose score',
     '',
     'Weighted alerts per 1000 words, over the project\'s own pinned Vale rules.',
-    'Score is 100 minus that density, floored at zero. `authored` is the text',
-    'the documentation gate reads; `all` adds the table cells it strips, which',
-    'is where a vendor specification\'s own descriptions land.',
+    'Score is 100 minus that density, floored at zero. `all` is every rendered',
+    'word, table cells included, which is where a vendor specification\'s own',
+    'descriptions land. `authored` is the narrower text, docgen\'s own prose.',
     '',
     '| SDK | authored score | authored words | authored E/W/S | all score | all words | all E/W/S |',
     '| --- | --- | --- | --- | --- | --- | --- |',
@@ -126,11 +126,17 @@ function main() {
     `- Prose score: ${data.config.score || '?'}` +
       (data.config.max_density ? ` (gate: density <= ${data.config.max_density})` : ' (measured, not gated)'),
     `- Byte-stability rerun: ${data.config.rerun || '?'}`,
+    // A run against a checkout does not say anything about the published
+    // tool, and a report that omits which one it used invites that reading.
+    ...(data.config.docgen_path ?
+      [`- **Docgen: local checkout \`${data.config.docgen_path}\`, not the published package.**`] : []),
+    ...(data.config.create_sdkgen_path ?
+      [`- **create-sdkgen: local checkout \`${data.config.create_sdkgen_path}\`.**`] : []),
     '',
     `**${passed}/${total} SDKs fully validated.**`,
     '',
-    'An SDK passes when the documentation checks, the text QA gate and the',
-    'byte-stability rerun all succeed.',
+    'An SDK passes when the deck build, the documentation checks, the text QA',
+    'gate, the prose score and the byte-stability rerun all succeed.',
     '',
     ...table(data),
     '',

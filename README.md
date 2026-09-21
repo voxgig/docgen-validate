@@ -81,8 +81,8 @@ It reports **two scopes**, and the gap between them is the point:
 
 | scope | text | what it measures |
 | --- | --- | --- |
-| `authored` | what docgen hands Vale | the prose docgen **wrote** |
 | `all` | every rendered word, table cells included | the prose a reader **sees** |
+| `authored` | table cells stripped | the prose docgen **wrote** |
 
 `--max-density <n>` turns the score into a gate, read from `all` by default.
 Without it the score is recorded and never fails a run.
@@ -216,12 +216,12 @@ the one this repo already states about checks: a harness that omits a phase of
 the pipeline it validates does not report a gap in the tool, it reports a gap
 in itself, and it looks exactly the same from the outside.
 
-### The prose gate reads a fraction of the documentation
+### The prose gate read a fraction of the documentation (fixed)
 
-`voxgig-docgen qa` hands Vale the output of docgen's `authored()`, which strips
-table cells. A generated API reference keeps the vendor's schema descriptions
-in exactly those cells, so most of what a reader sees is never linted. The
-score phase measures both scopes, which makes the gap a number:
+`voxgig-docgen qa` handed Vale the output of docgen's `authored()`, which
+strips table cells. A generated API reference keeps the vendor's schema
+descriptions in exactly those cells, so most of what a reader sees was never
+linted. Measuring both scopes made the gap a number:
 
 | SDK | schemas | words linted | words rendered | linted |
 | --- | ---: | ---: | ---: | ---: |
@@ -232,39 +232,44 @@ score phase measures both scopes, which makes the gap a number:
 | `hubspotmarketing` | 313 | 22509 | 101158 | **22%** |
 
 `aareguru` is the control: it declares no component schemas at all, so it has
-almost no table content, and almost nothing is hidden from the gate. At the
-ceiling case Vale reads roughly one word in five.
+almost no table content and almost nothing was hidden. At the ceiling case
+Vale read roughly one word in five.
 
-### The rules judge text docgen did not write
+### The rules judged text docgen did not write (fixed)
 
-Widening the scope shows why the cells were stripped. Every error the `all`
-scope finds on `hubspotmarketing` is vendor text:
+Widening the scope showed why the cells had been stripped. Every error the
+wider scope found on `hubspotmarketing` was vendor text:
 
 ```
-7x Vale.Spelling   legitimate_interest, implicit_consent_to_process, default_group
-4x Google.Spacing  {{ contact.NAME }}
+7x Vale.Spelling   last_paid_date, legitimate_interest, default_group, ...
+4x Google.Spacing  {{ contact.NAME }}, {{ custom.NAME }}
 ```
 
 None of it is in a docgen template. It is HubSpot's own OpenAPI descriptions,
-carried through to the reference pages:
+carried through to the reference pages, and an SDK author cannot satisfy the
+rules without editing the upstream specification.
 
-> Supports types: none, legitimate_interest, explicit_consent_to_process,
-> implicit_consent_to_process.
-
-The same is true of the banned word `navigat(?:e|es|ed|ing)`, which the
-local-only check already reports on seven pages:
+But the text is not prose: `legitimate_interest` is an enumerated value and
+`{{ contact.NAME }}` is a template slot. Neither should be linted as English.
+The same went for the banned word `navigat(?:e|es|ed|ing)`, which the
+local-only check reported on seven pages:
 
 > This endpoint supports pagination to **navigate** through large sets of data.
 
-An SDK author cannot satisfy these rules without editing the upstream
-specification. But the text is not really prose: `legitimate_interest` is an
-enum value and `{{ contact.NAME }}` is a template token, and neither should be
-linted as English in the first place. Stripping the cells hid the symptom at
-the cost of the coverage above; rendering identifiers as code addresses it
-without giving up either.
+Both are fixed in docgen, in opposite directions:
 
-Four of the five SDKs never hit this, and it took 313 schemas to surface it.
-That is the argument for picking a complexity range rather than a
+- Identifier shapes render as code, which both prose extractions ignore, so
+  Vale can read the whole page. It then finds nothing, on all five SDKs.
+- The banned vocabulary and the neutral-voice rule read only the prose docgen
+  wrote, because they are house style. The rules that describe a defect (a
+  repeated word, an em dash, an emoji) still read everything.
+
+The recorded run in `reports/latest/` is against that build, which is why its
+header says so. Against the published `@voxgig/docgen` the two findings above
+still reproduce.
+
+Four of the five SDKs never hit any of this, and it took 313 schemas to
+surface it. That is the argument for picking a complexity range rather than a
 representative sample.
 
 ### The published scaffold did not compile (fixed in create-sdkgen 0.26.0)

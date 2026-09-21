@@ -1,9 +1,9 @@
 {
   "config": {
     "specs": "specs/default.txt",
-    "out": "/tmp/claude-0/-home-user/d7eb7591-ec7c-5a77-af80-f67f7f316499/scratchpad/full",
+    "out": "/tmp/claude-0/-home-user/d7eb7591-ec7c-5a77-af80-f67f7f316499/scratchpad/full2",
     "cache": "/home/user/voxgig-sdk",
-    "run_dir": "/tmp/claude-0/-home-user/d7eb7591-ec7c-5a77-af80-f67f7f316499/scratchpad/full/_runs/20260921T164619Z",
+    "run_dir": "/tmp/claude-0/-home-user/d7eb7591-ec7c-5a77-af80-f67f7f316499/scratchpad/full2/_runs/20260921T171048Z",
     "org": "voxgig-sdk",
     "targets": "ts",
     "editions": "summary,github-pages,presentation",
@@ -12,8 +12,8 @@
     "qa": "on",
     "vale": "off",
     "rerun": "on",
-    "started": "2026-09-21T16:46:19Z",
-    "finished": "2026-09-21T16:47:55Z",
+    "started": "2026-09-21T17:10:48Z",
+    "finished": "2026-09-21T17:12:26Z",
     "passed": 0,
     "total": 5
   },
@@ -36,8 +36,8 @@
       "build_rc": 0,
       "generate_rc": 0,
       "check_rc": 0,
-      "checks_pass": 16,
-      "checks_total": 16,
+      "checks_pass": 17,
+      "checks_total": 17,
       "qa_rc": 1,
       "rerun_rc": 0
     },
@@ -59,8 +59,8 @@
       "build_rc": 0,
       "generate_rc": 0,
       "check_rc": 0,
-      "checks_pass": 16,
-      "checks_total": 16,
+      "checks_pass": 17,
+      "checks_total": 17,
       "qa_rc": 1,
       "rerun_rc": 0
     },
@@ -82,8 +82,8 @@
       "build_rc": 0,
       "generate_rc": 0,
       "check_rc": 0,
-      "checks_pass": 16,
-      "checks_total": 16,
+      "checks_pass": 17,
+      "checks_total": 17,
       "qa_rc": 1,
       "rerun_rc": 0
     },
@@ -105,8 +105,8 @@
       "build_rc": 0,
       "generate_rc": 0,
       "check_rc": 0,
-      "checks_pass": 16,
-      "checks_total": 16,
+      "checks_pass": 17,
+      "checks_total": 17,
       "qa_rc": 1,
       "rerun_rc": 0
     },
@@ -128,8 +128,8 @@
       "build_rc": 0,
       "generate_rc": 0,
       "check_rc": 0,
-      "checks_pass": 16,
-      "checks_total": 16,
+      "checks_pass": 17,
+      "checks_total": 17,
       "qa_rc": 1,
       "rerun_rc": 0
     }

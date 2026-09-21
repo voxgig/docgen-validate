@@ -6,7 +6,7 @@ end-to-end by generating documentation for real SDKs from the
 that the documentation describes the model it was built from.
 
 **Current state: 0/5 SDKs fully validated.** Every SDK generates documentation
-that passes all 16 structural checks and regenerates byte-identically; every
+that passes all 17 structural checks and regenerates byte-identically; every
 SDK fails the text QA gate, on one defect that is the same everywhere. The
 latest run is in [`reports/latest/`](reports/latest/) and the two findings are
 described under [Findings](#findings).
@@ -38,7 +38,10 @@ documentation bug rarely shows up at both ends.
 
 For each SDK:
 
-1. **fetch** — shallow-clone the SDK repo, take its `.sdk/def/<spec>`
+1. **fetch** — shallow-clone the SDK repo, or refresh an existing checkout, and
+   take its `.sdk/def/<spec>`. A populated cache is refreshed rather than
+   reused, so a run always validates the current spec; `--no-fetch` is the
+   opt-out for offline use and for reproducing an earlier run.
 2. **scaffold** — `npm create @voxgig/sdkgen@latest <name> -- --def <spec> --folder <out>`
 3. **target add** — `voxgig-sdkgen target add ts` (documentation describes the targets)
 4. **edition add** — `summary`, `github-pages`, `presentation`
@@ -72,8 +75,29 @@ The last one is load-bearing: a page missing from the manifest is a page
 `voxgig-docgen qa` never opens, so a stale manifest silently narrows the gate.
 
 These checks are themselves tested. `test/check-docs.test.cjs` builds a
-known-good tree, breaks one thing at a time, and asserts the matching check
-goes red — a check that cannot fail is not a check.
+known-good tree, breaks one thing at a time, and asserts that the failure set
+is *exactly* the matching check — a check that cannot fail is not a check, and
+a case that trips two of them is not isolating either.
+
+## What the harness refuses to do
+
+A validator that reports success when it validated nothing is worse than no
+validator. These are deliberate hard failures:
+
+- **Validating nothing is not passing.** An empty spec list, or an `--only`
+  that matches no SDK, exits non-zero rather than reporting `0/0`. A mixed
+  `--only` with one good name and one typo fails too.
+- **A failed `target add` or `edition add` abandons the SDK.** `check-docs`
+  derives what it expects from the resulting model, so an item that failed to
+  install is simply absent from the expected set, and every later phase would
+  pass without ever exercising it.
+- **The byte-stability digest has no fallback.** The hasher is resolved at
+  startup and its absence is fatal. A fallback that hashes anything but the
+  documentation stream returns equal digests every time, which turns the gate
+  into one that cannot fail.
+- **Absent is "not reached", never "passed".** The driver abandons an SDK at
+  its first failure, so later phases have no record. `REPORT.md` names them as
+  not reached instead of calling the run clean.
 
 ## Usage
 
@@ -149,8 +173,8 @@ Isolation, reproducible with this harness:
 
 | editions | doc checks | text QA | byte-stable |
 | --- | --- | --- | --- |
-| `summary,github-pages,presentation` | 16/16 | **fails**, 10 broken links | yes |
-| `summary,github-pages` | 15/15 | passes | yes |
+| `summary,github-pages,presentation` | 17/17 | **fails**, 10 broken links | yes |
+| `summary,github-pages` | 16/16 | passes | yes |
 
 Everything else in the pipeline is sound: the documentation describes the model
 correctly in both configurations, and regenerating is byte-identical.

@@ -84,6 +84,23 @@ function build() {
 
 const failures = root => checkDocs(root).checks.filter(c => !c.pass).map(c => c.name)
 
+// Drop a page from the manifest as well as the disk, so removing a page tests
+// entity coverage ALONE. Without this the manifest check fails too, and a case
+// that trips two assertions cannot show which one is doing the work.
+function unlist(root, ...rel) {
+  const file = Path.join(root, '.sdk/doc/qa-manifest.json')
+  const manifest = JSON.parse(Fs.readFileSync(file, 'utf8'))
+  manifest.files = manifest.files.filter(f => !rel.includes(f))
+  Fs.writeFileSync(file, JSON.stringify(manifest))
+}
+
+function enlist(root, ...rel) {
+  const file = Path.join(root, '.sdk/doc/qa-manifest.json')
+  const manifest = JSON.parse(Fs.readFileSync(file, 'utf8'))
+  manifest.files.push(...rel)
+  Fs.writeFileSync(file, JSON.stringify(manifest))
+}
+
 test('a correct documentation tree passes every check', () => {
   const root = build()
   try {
@@ -94,54 +111,73 @@ test('a correct documentation tree passes every check', () => {
 })
 
 const CASES = [
-  ['a missing entity page is caught', root => Fs.rmSync(Path.join(root, 'docs/api/product.html')),
+  ['a missing entity page is caught',
+    root => { Fs.rmSync(Path.join(root, 'docs/api/product.html')); unlist(root, 'docs/api/product.html') },
     'every active entity has an API page'],
   ['a page for an entity the model lacks is caught',
-    root => Fs.copyFileSync(Path.join(root, 'docs/api/search.html'), Path.join(root, 'docs/api/ghost.html')),
+    root => {
+      Fs.copyFileSync(Path.join(root, 'docs/api/search.html'), Path.join(root, 'docs/api/ghost.html'))
+      enlist(root, 'docs/api/ghost.html')
+    },
     'no API page without an entity'],
-  ['a missing SDK page is caught', root => Fs.rmSync(Path.join(root, 'docs/sdks/ts.html')),
+  ['a missing SDK page is caught',
+    root => { Fs.rmSync(Path.join(root, 'docs/sdks/ts.html')); unlist(root, 'docs/sdks/ts.html') },
     'every active target has an SDK page'],
-  ['a missing feature page is caught', root => Fs.rmSync(Path.join(root, 'docs/features/test.html')),
+  ['a missing feature page is caught',
+    root => { Fs.rmSync(Path.join(root, 'docs/features/test.html')); unlist(root, 'docs/features/test.html') },
     'every active feature has a page'],
-  ['a missing guide is caught', root => Fs.rmSync(Path.join(root, 'docs/guides/errors.html')),
+  ['a missing guide is caught',
+    root => { Fs.rmSync(Path.join(root, 'docs/guides/errors.html')); unlist(root, 'docs/guides/errors.html') },
     'the guide set is complete'],
   ['a route count that disagrees with the model is caught',
     root => Fs.writeFileSync(Path.join(root, 'SUMMARY.md'),
       SUMMARY.replace('2 entities and 4 HTTP routes', '2 entities and 9 HTTP routes')),
     'summary entity and route counts match the model'],
+  ['a summary that omits an entity is caught',
+    root => Fs.writeFileSync(Path.join(root, 'SUMMARY.md'), SUMMARY.replace(/\bsearch\b/g, 'lookup')),
+    'summary names every entity'],
   ['a leaked placeholder is caught',
-    root => Fs.writeFileSync(Path.join(root, 'docs/index.html'), PAGE('ProjectName')),
+    root => Fs.writeFileSync(Path.join(root, 'docs/index.html'), PAGE('Demo') + 'ProjectName'),
     'no placeholder leaks into the documentation'],
   ['a leaked jostraca ref is caught',
-    root => Fs.writeFileSync(Path.join(root, 'docs/index.html'), PAGE('x') + '$$model.path$$'),
+    root => Fs.writeFileSync(Path.join(root, 'docs/index.html'), PAGE('Demo') + '$$model.path$$'),
     'no placeholder leaks into the documentation'],
-  ['a stub page is caught', root => Fs.writeFileSync(Path.join(root, 'docs/guides/errors.html'), 'x'),
+  ['an untitled page is caught',
+    root => Fs.writeFileSync(Path.join(root, 'docs/guides/errors.html'),
+      '<!doctype html><html><head></head><body><p>' +
+      'Body text long enough to clear the stub floor entirely. '.repeat(6) + '</p></body></html>'),
+    'every HTML page has a title'],
+  ['a stub page is caught',
+    root => Fs.writeFileSync(Path.join(root, 'docs/guides/errors.html'), PAGE('errors').slice(0, 120)),
     'no page is a stub'],
   ['a manifest entry with no file is caught',
-    root => {
-      const file = Path.join(root, '.sdk/doc/qa-manifest.json')
-      const manifest = JSON.parse(Fs.readFileSync(file, 'utf8'))
-      manifest.files.push('docs/api/absent.html')
-      Fs.writeFileSync(file, JSON.stringify(manifest))
-    },
+    root => enlist(root, 'docs/api/absent.html'),
     'every manifest entry exists'],
   ['a page missing from the manifest is caught',
-    root => {
-      const file = Path.join(root, '.sdk/doc/qa-manifest.json')
-      const manifest = JSON.parse(Fs.readFileSync(file, 'utf8'))
-      manifest.files = manifest.files.filter(f => f !== 'docs/api/search.html')
-      Fs.writeFileSync(file, JSON.stringify(manifest))
-    },
+    root => unlist(root, 'docs/api/search.html'),
     'every emitted page is in the QA manifest'],
+  ['a malformed manifest is caught',
+    root => Fs.writeFileSync(Path.join(root, '.sdk/doc/qa-manifest.json'), '{ not json'),
+    'QA manifest is readable'],
+  ['a model that declares no edition is caught',
+    root => {
+      const file = Path.join(root, '.sdk/model/sdk.json')
+      const model = JSON.parse(Fs.readFileSync(file, 'utf8'))
+      model.main.kit.doc.edition = {}
+      Fs.writeFileSync(file, JSON.stringify(model))
+    },
+    'the model declares at least one edition'],
 ]
 
+// Each case must break EXACTLY the assertion it names. A mutation that trips a
+// second check is not isolating anything, and would let a regression in the
+// named check hide behind its collateral.
 for (const [title, corrupt, expected] of CASES) {
   test(title, () => {
     const root = build()
     try {
       corrupt(root)
-      assert.ok(failures(root).includes(expected),
-        `expected "${expected}" to fail, got: ${JSON.stringify(failures(root))}`)
+      assert.deepStrictEqual(failures(root), [expected])
     } finally { Fs.rmSync(root, { recursive: true, force: true }) }
   })
 }

@@ -93,42 +93,50 @@ function checkDocs(root) {
   const summaryPath = Path.join(root, 'SUMMARY.md')
   const summary = read(summaryPath)
 
-  // 2. One API page per active entity, and no page for an entity the model
-  //    does not have. An extra page is as wrong as a missing one: it means the
-  //    docs describe an endpoint the SDK will not expose.
-  const apiDir = Path.join(root, 'docs/api')
-  const apiPages = walk(apiDir).map(f => Path.basename(f, '.html'))
-    .filter(n => n !== 'index' && !n.endsWith('.html'))
-  const missingEntities = want.entities.filter(e => !apiPages.includes(e))
-  const extraEntities = apiPages.filter(p => !want.entities.includes(p))
-  ok('every active entity has an API page', 0 === missingEntities.length,
-    missingEntities.length ? 'missing: ' + missingEntities.join(',') : `${want.entities.length} entities`)
-  ok('no API page without an entity', 0 === extraEntities.length,
-    extraEntities.length ? 'extra: ' + extraEntities.join(',') : '')
+  // The page set below belongs to the github-pages edition. A project that
+  // installs only `summary` emits no docs/ tree at all, and asserting against
+  // it would fail a correctly generated project.
+  const pages = want.editions.find(e => 'github-pages' === e.name)
+  const hasSummary = want.editions.some(e => 'summary' === e.name)
 
-  // 3. One SDK page per active target.
-  const sdkPages = walk(Path.join(root, 'docs/sdks')).map(f => Path.basename(f, '.html'))
-    .filter(n => n !== 'index')
-  const missingTargets = want.targets.filter(t => !sdkPages.includes(t))
-  ok('every active target has an SDK page', 0 === missingTargets.length,
-    missingTargets.length ? 'missing: ' + missingTargets.join(',') : `${want.targets.length} targets`)
+  if (pages) {
+    // 2. One API page per active entity, and no page for an entity the model
+    //    does not have. An extra page is as wrong as a missing one: it means
+    //    the docs describe an endpoint the SDK will not expose.
+    const apiDir = Path.join(root, 'docs/api')
+    const apiPages = walk(apiDir).map(f => Path.basename(f, '.html'))
+      .filter(n => n !== 'index' && !n.endsWith('.html'))
+    const missingEntities = want.entities.filter(e => !apiPages.includes(e))
+    const extraEntities = apiPages.filter(p => !want.entities.includes(p))
+    ok('every active entity has an API page', 0 === missingEntities.length,
+      missingEntities.length ? 'missing: ' + missingEntities.join(',') : `${want.entities.length} entities`)
+    ok('no API page without an entity', 0 === extraEntities.length,
+      extraEntities.length ? 'extra: ' + extraEntities.join(',') : '')
 
-  // 4. One feature page per active feature.
-  const featurePages = walk(Path.join(root, 'docs/features')).map(f => Path.basename(f, '.html'))
-    .filter(n => n !== 'index')
-  const missingFeatures = want.features.filter(f => !featurePages.includes(f))
-  ok('every active feature has a page', 0 === missingFeatures.length,
-    missingFeatures.length ? 'missing: ' + missingFeatures.join(',') : `${want.features.length} features`)
+    // 3. One SDK page per active target.
+    const sdkPages = walk(Path.join(root, 'docs/sdks')).map(f => Path.basename(f, '.html'))
+      .filter(n => n !== 'index')
+    const missingTargets = want.targets.filter(t => !sdkPages.includes(t))
+    ok('every active target has an SDK page', 0 === missingTargets.length,
+      missingTargets.length ? 'missing: ' + missingTargets.join(',') : `${want.targets.length} targets`)
 
-  // 5. The standing guides are present.
-  const missingGuides = GUIDES.filter(g => !Fs.existsSync(Path.join(root, 'docs/guides', g + '.html')))
-  ok('the guide set is complete', 0 === missingGuides.length,
-    missingGuides.length ? 'missing: ' + missingGuides.join(',') : `${GUIDES.length} guides`)
+    // 4. One feature page per active feature.
+    const featurePages = walk(Path.join(root, 'docs/features')).map(f => Path.basename(f, '.html'))
+      .filter(n => n !== 'index')
+    const missingFeatures = want.features.filter(f => !featurePages.includes(f))
+    ok('every active feature has a page', 0 === missingFeatures.length,
+      missingFeatures.length ? 'missing: ' + missingFeatures.join(',') : `${want.features.length} features`)
+
+    // 5. The standing guides are present.
+    const missingGuides = GUIDES.filter(g => !Fs.existsSync(Path.join(root, 'docs/guides', g + '.html')))
+    ok('the guide set is complete', 0 === missingGuides.length,
+      missingGuides.length ? 'missing: ' + missingGuides.join(',') : `${GUIDES.length} guides`)
+  }
 
   // 6. The summary's own counts agree with the model. This is the check that
   //    catches a doc built from a stale model: the pages all exist and read
   //    correctly, and the numbers describe a different API.
-  if (summary) {
+  if (hasSummary && summary) {
     const counted = summary.match(/contains\s+(\d+)\s+entities\s+and\s+(\d+)\s+HTTP routes/i)
     ok('summary entity and route counts match the model',
       counted && Number(counted[1]) === want.entities.length && Number(counted[2]) === want.routes,
@@ -171,8 +179,12 @@ function checkDocs(root) {
   // 9. The QA manifest is the list `voxgig-docgen qa` reads. A page missing
   //    from it is a page QA never opens, so the manifest going stale silently
   //    narrows the gate.
-  const manifest = JSON.parse(read(Path.join(root, '.sdk/doc/qa-manifest.json')) || 'null')
-  if (manifest && Array.isArray(manifest.files)) {
+  let manifest = null
+  try { manifest = JSON.parse(read(Path.join(root, '.sdk/doc/qa-manifest.json')) || 'null') } catch (e) { }
+  const readable = !!(manifest && Array.isArray(manifest.files))
+  ok('QA manifest is readable', readable,
+    readable ? `${manifest.files.length} entries` : '.sdk/doc/qa-manifest.json missing or malformed')
+  if (readable) {
     const absent = manifest.files.filter(f => !Fs.existsSync(Path.join(root, f)))
     ok('every manifest entry exists', 0 === absent.length,
       absent.length ? absent.slice(0, 5).join(' ') : `${manifest.files.length} entries`)
@@ -183,8 +195,6 @@ function checkDocs(root) {
     const unlisted = prose.filter(f => !listed.has(f))
     ok('every emitted page is in the QA manifest', 0 === unlisted.length,
       unlisted.length ? unlisted.slice(0, 5).join(' ') : `${prose.length} pages`)
-  } else {
-    ok('QA manifest is readable', false, '.sdk/doc/qa-manifest.json missing or malformed')
   }
 
   return { checks, survey: want }

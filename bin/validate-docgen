@@ -123,9 +123,24 @@ for tool in node npm git; do
   command -v "${tool}" >/dev/null 2>&1 || { echo "ERROR: ${tool} is required" >&2; exit 2; }
 done
 
+# `timeout` is absent on macOS, where the fallback is a Python wrapper. Check
+# for it here rather than letting every phase fail with "python3: not found".
+if ! command -v timeout >/dev/null 2>&1; then
+  command -v python3 >/dev/null 2>&1 || {
+    echo "ERROR: neither timeout(1) nor python3 is available; one is required for phase timeouts" >&2
+    exit 2; }
+fi
+
+# Both overrides become symlink targets or copy sources inside the generated
+# project, so a relative path would resolve against the wrong directory.
 if [ -n "${CREATE_SDKGEN_PATH}" ]; then
   [ -d "${CREATE_SDKGEN_PATH}/project/standard/.sdk/src" ] || {
     echo "ERROR: --create-sdkgen-path: no project/standard/.sdk/src at ${CREATE_SDKGEN_PATH}" >&2; exit 2; }
+  CREATE_SDKGEN_PATH="$(cd "${CREATE_SDKGEN_PATH}" && pwd)"
+fi
+if [ -n "${DOCGEN_PATH}" ]; then
+  [ -d "${DOCGEN_PATH}" ] || { echo "ERROR: --docgen-path: not a directory: ${DOCGEN_PATH}" >&2; exit 2; }
+  DOCGEN_PATH="$(cd "${DOCGEN_PATH}" && pwd)"
 fi
 
 mkdir -p "${OUT_DIR}"
@@ -162,29 +177,73 @@ say() { echo "$*" | tee -a "${SUMMARY}"; }
   echo "config started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >> "${SUMMARY}"
 
+ONLY_SEEN=""
 is_only_match() {
   [ -z "${ONLY}" ] && return 0
   local name="$1" entry
   IFS=',' read -ra wanted <<< "${ONLY}"
-  for entry in "${wanted[@]}"; do [ "${entry}" = "${name}" ] && return 0; done
+  for entry in "${wanted[@]}"; do
+    if [ "${entry}" = "${name}" ]; then ONLY_SEEN="${ONLY_SEEN} ${name}"; return 0; fi
+  done
+  return 1
+}
+
+# A typo in --only must not look like a clean run over nothing.
+check_only_matched() {
+  [ -z "${ONLY}" ] && return 0
+  local entry missing=""
+  IFS=',' read -ra wanted <<< "${ONLY}"
+  for entry in "${wanted[@]}"; do
+    case " ${ONLY_SEEN} " in *" ${entry} "*) ;; *) missing="${missing} ${entry}";; esac
+  done
+  [ -z "${missing}" ] && return 0
+  echo "ERROR: --only named SDKs not in ${SPECS}:${missing}" >&2
   return 1
 }
 
 # A digest of the documentation tree, used to prove regeneration is stable.
+#
+# The hasher is resolved once, at startup, and its absence is fatal. A fallback
+# that hashes anything other than the same byte stream - the root path, say -
+# produces equal digests for every run and turns this gate into a rubber stamp
+# that cannot fail.
+HASHER=""
+for candidate in shasum sha256sum sha1sum md5sum cksum; do
+  if command -v "${candidate}" >/dev/null 2>&1; then HASHER="${candidate}"; break; fi
+done
+if [ -z "${HASHER}" ] && [ "${NO_RERUN}" = 0 ]; then
+  echo "ERROR: no content hasher found (shasum, sha256sum, sha1sum, md5sum, cksum)." >&2
+  echo "       The byte-stability phase needs one. Pass --no-rerun to skip it." >&2
+  exit 2
+fi
+
 docs_digest() {
   local root="$1"
   { [ -f "${root}/SUMMARY.md" ] && cat "${root}/SUMMARY.md"
     find "${root}/docs" -type f 2>/dev/null | LC_ALL=C sort | while read -r f; do
       echo "${f#${root}/}"; cat "${f}"
     done
-  } 2>/dev/null | shasum 2>/dev/null | cut -d' ' -f1 \
-    || { echo "${root}" | md5sum | cut -d' ' -f1; }
+  } 2>/dev/null | "${HASHER}" | cut -d' ' -f1
 }
 
+# A populated cache is REFRESHED, not reused as-is. Skipping the fetch would
+# pin every later run to whatever revision the first run happened to get, so
+# an upstream spec change would never be validated. --no-fetch is the explicit
+# opt-out, for offline use and for reproducing an earlier run.
 fetch_spec() {
   local name="$1" repo="$2" file="$3" log="$4"
   local dir="${CACHE_DIR}/${repo}"
-  if [ ! -d "${dir}/.git" ]; then
+  if [ -d "${dir}/.git" ]; then
+    if [ "${NO_FETCH}" = 0 ]; then
+      local branch
+      branch="$(git -C "${dir}" rev-parse --abbrev-ref HEAD 2>/dev/null)"
+      [ -n "${branch}" ] && [ "${branch}" != "HEAD" ] || branch=main
+      GIT_LFS_SKIP_SMUDGE=1 run_with_timeout "${FETCH_TIMEOUT_DEFAULT}" \
+        git -C "${dir}" fetch --depth 1 origin "${branch}" >> "${log}" 2>&1 \
+        && git -C "${dir}" reset --hard FETCH_HEAD >> "${log}" 2>&1 \
+        || { echo "refresh failed for ${dir}" >> "${log}"; return 1; }
+    fi
+  else
     if [ "${NO_FETCH}" = 1 ]; then
       echo "--no-fetch: ${dir} is not a checkout" >> "${log}"; return 1
     fi
@@ -245,23 +304,34 @@ while IFS= read -r line || [ -n "${line}" ]; do
     ln -s "${DOCGEN_PATH}" "${folder}/.sdk/node_modules/@voxgig/docgen"
   fi
 
-  # 4. targets
+  # 4 and 5. targets and editions.
+  #
+  # A failed setup command ABANDONS the SDK. check-docs derives what it expects
+  # from the resulting model, so a target or edition that failed to install is
+  # simply absent from the expected set: every later phase would pass while
+  # never exercising the thing that was asked for.
+  setup_ok=1
   IFS=',' read -ra target_list <<< "${TARGETS}"
   for target in "${target_list[@]}"; do
     say ">> [${name}] target add ${target}"
     (cd "${folder}/.sdk" && run_with_timeout "${TARGET_TIMEOUT}" \
       npx voxgig-sdkgen target add "${target}") > "${log_base}.target.${target}.log" 2>&1
-    echo "${name}_target_${target}_rc=$?" >> "${SUMMARY}"
+    rc=$?
+    echo "${name}_target_${target}_rc=${rc}" >> "${SUMMARY}"
+    [ "${rc}" = 0 ] || { say "!! [${name}] target add ${target} FAILED rc=${rc}"; setup_ok=0; }
   done
 
-  # 5. editions
   IFS=',' read -ra edition_list <<< "${EDITIONS}"
   for edition in "${edition_list[@]}"; do
     say ">> [${name}] edition add ${edition}"
     (cd "${folder}/.sdk" && run_with_timeout "${TARGET_TIMEOUT}" \
       npx voxgig-sdkgen edition add "${edition}") > "${log_base}.edition.${edition}.log" 2>&1
-    echo "${name}_edition_${edition}_rc=$?" >> "${SUMMARY}"
+    rc=$?
+    echo "${name}_edition_${edition}_rc=${rc}" >> "${SUMMARY}"
+    [ "${rc}" = 0 ] || { say "!! [${name}] edition add ${edition} FAILED rc=${rc}"; setup_ok=0; }
   done
+
+  [ "${setup_ok}" = 1 ] || { say "!! [${name}] FAIL (setup)"; continue; }
 
   # 6. build
   say ">> [${name}] build"
@@ -338,5 +408,15 @@ if [ "${NO_SUMMARY}" = 0 ]; then
   "${REPO_DIR}/bin/summarize" --run-dir "${RUN_DIR}" || true
 fi
 
+ONLY_OK=1
+check_only_matched || ONLY_OK=0
+
+# Validating nothing is not success. An empty spec list, an all-comment file or
+# a mistyped --only would otherwise report "0/0" and exit clean.
+if [ "${TOTAL}" = 0 ]; then
+  echo "ERROR: no SDKs were selected from ${SPECS}${ONLY:+ (--only ${ONLY})}" >&2
+  exit 2
+fi
+[ "${ONLY_OK}" = 1 ] || exit 2
 [ "${PASSED}" = "${TOTAL}" ] || exit 1
 exit 0

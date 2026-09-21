@@ -20,16 +20,22 @@ function parse(text) {
       if (!sdks[match[1]]) { sdks[match[1]] = { name: match[1], repo: match[2], spec: match[3] }; order.push(match[1]) }
       continue
     }
-    if ((match = line.match(/^(\w+)_(fetch|scaffold|overlay|build|generate|check|qa|rerun)_rc=(-?\d+)$/))) {
-      const sdk = sdks[match[1]]; if (sdk) sdk[match[2] + '_rc'] = Number(match[3]); continue
+    // An SDK name may contain characters `\w` does not cover (a hyphen, say),
+    // so the name is matched against the names `sdk=` already announced rather
+    // than by a character class that silently drops those records.
+    if ((match = line.match(/^(.+?)_(fetch|scaffold|overlay|build|generate|check|qa|rerun)_rc=(-?\d+)$/))) {
+      const sdk = sdks[match[1]]; if (sdk) { sdk[match[2] + '_rc'] = Number(match[3]); continue }
     }
-    if ((match = line.match(/^(\w+)_(target|edition)_([\w-]+)_rc=(-?\d+)$/))) {
+    if ((match = line.match(/^(.+?)_(target|edition)_(.+)_rc=(-?\d+)$/))) {
       const sdk = sdks[match[1]]
-      if (sdk) { sdk[match[2] + 's'] = sdk[match[2] + 's'] || {}; sdk[match[2] + 's'][match[3]] = Number(match[4]) }
-      continue
+      if (sdk) {
+        sdk[match[2] + 's'] = sdk[match[2] + 's'] || {}
+        sdk[match[2] + 's'][match[3]] = Number(match[4])
+        continue
+      }
     }
-    if ((match = line.match(/^(\w+)_checks_(pass|total)=(\d+)$/))) {
-      const sdk = sdks[match[1]]; if (sdk) sdk['checks_' + match[2]] = Number(match[3]); continue
+    if ((match = line.match(/^(.+?)_checks_(pass|total)=(\d+)$/))) {
+      const sdk = sdks[match[1]]; if (sdk) { sdk['checks_' + match[2]] = Number(match[3]); continue }
     }
   }
   return { config, sdks: order.map(n => sdks[n]) }
@@ -96,8 +102,16 @@ function main() {
     if (undefined !== sdk.checks_total) {
       lines.push(`- documentation checks: ${sdk.checks_pass}/${sdk.checks_total}`)
     }
-    const failed = PHASES.filter(p => undefined !== sdk[p + '_rc'] && 0 !== sdk[p + '_rc'])
-    lines.push(failed.length ? `- failed phases: ${failed.join(', ')}` : '- all phases clean')
+    // Absent is "not reached", never "passed": the driver abandons an SDK at
+    // its first failure, so the phases after it have no record at all. Saying
+    // "all phases clean" for a run that stopped early would invert that.
+    const expected = PHASES.filter(p =>
+      !('qa' === p && 'off' === data.config.qa) && !('rerun' === p && 'off' === data.config.rerun))
+    const failed = expected.filter(p => undefined !== sdk[p + '_rc'] && 0 !== sdk[p + '_rc'])
+    const absent = expected.filter(p => undefined === sdk[p + '_rc'])
+    if (failed.length) lines.push(`- failed phases: ${failed.join(', ')}`)
+    if (absent.length) lines.push(`- phases not reached: ${absent.join(', ')}`)
+    if (!failed.length && !absent.length) lines.push('- all phases clean')
     lines.push('')
   }
 

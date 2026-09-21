@@ -14,6 +14,7 @@ const LOG = [
   'config targets=ts',
   'config editions=summary,github-pages',
   'config qa=on',
+  'config decks=on',
   'config score=on',
   'config score_scope=',
   'config max_density=12',
@@ -24,6 +25,7 @@ const LOG = [
   'hubspot-marketing_scaffold_rc=0',
   'hubspot-marketing_build_rc=0',
   'hubspot-marketing_generate_rc=0',
+  'hubspot-marketing_deck_rc=0',
   'hubspot-marketing_check_rc=0',
   'hubspot-marketing_checks_pass=17',
   'hubspot-marketing_checks_total=17',
@@ -107,4 +109,14 @@ test('a metric line naming an SDK the log never announced is ignored', () => {
   const data = parse(stray)
   assert.strictEqual(data.sdks.length, 1)
   assert.strictEqual(data.sdks[0].name, 'hubspot-marketing')
+})
+
+test('the deck phase is parsed, and a deck failure is not lost', () => {
+  assert.strictEqual(only(LOG).deck_rc, 0)
+  assert.strictEqual(only(LOG.replace('_deck_rc=0', '_deck_rc=2')).deck_rc, 2)
+})
+
+test('decks off is carried through so the report does not claim the phase ran', () => {
+  const off = LOG.replace('config decks=on', 'config decks=off')
+  assert.strictEqual(parse(off).config.decks, 'off')
 })

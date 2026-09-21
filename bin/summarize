@@ -6,7 +6,7 @@
 const Fs = require('node:fs')
 const Path = require('node:path')
 
-const PHASES = ['fetch', 'scaffold', 'build', 'generate', 'check', 'qa', 'score', 'rerun']
+const PHASES = ['fetch', 'scaffold', 'build', 'generate', 'deck', 'check', 'qa', 'score', 'rerun']
 const SCOPES = ['authored', 'all']
 const METRICS = ['score', 'density', 'words', 'errors', 'warnings', 'suggestions']
 
@@ -25,7 +25,7 @@ function parse(text) {
     // An SDK name may contain characters `\w` does not cover (a hyphen, say),
     // so the name is matched against the names `sdk=` already announced rather
     // than by a character class that silently drops those records.
-    if ((match = line.match(/^(.+?)_(fetch|scaffold|overlay|build|generate|check|qa|score|rerun)_rc=(-?\d+)$/))) {
+    if ((match = line.match(/^(.+?)_(fetch|scaffold|overlay|build|generate|deck|check|qa|score|rerun)_rc=(-?\d+)$/))) {
       const sdk = sdks[match[1]]; if (sdk) { sdk[match[2] + '_rc'] = Number(match[3]); continue }
     }
     if ((match = line.match(/^(.+?)_(target|edition)_(.+)_rc=(-?\d+)$/))) {
@@ -122,6 +122,7 @@ function main() {
     `- Targets: \`${data.config.targets || '?'}\``,
     `- Editions: \`${data.config.editions || '?'}\``,
     `- Text QA: ${data.config.qa || '?'} (Vale ${data.config.vale || '?'})`,
+    `- Presentation decks: ${data.config.decks || '?'}`,
     `- Prose score: ${data.config.score || '?'}` +
       (data.config.max_density ? ` (gate: density <= ${data.config.max_density})` : ' (measured, not gated)'),
     `- Byte-stability rerun: ${data.config.rerun || '?'}`,
@@ -162,6 +163,7 @@ function main() {
     // "all phases clean" for a run that stopped early would invert that.
     const expected = PHASES.filter(p =>
       !('qa' === p && 'off' === data.config.qa) &&
+      !('deck' === p && 'off' === data.config.decks) &&
       !('score' === p && 'off' === data.config.score) &&
       !('rerun' === p && 'off' === data.config.rerun))
     const failed = expected.filter(p => undefined !== sdk[p + '_rc'] && 0 !== sdk[p + '_rc'])

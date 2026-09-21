@@ -217,3 +217,50 @@ test('an uncompiled model is reported rather than crashing', () => {
     assert.deepStrictEqual(failures(root), ['model compiled'])
   } finally { Fs.rmSync(root, { recursive: true, force: true }) }
 })
+
+// Building a presentation drops a Slidev toolchain inside docs/. The checks
+// have to ignore it without going blind to the documentation beside it, so
+// both directions are pinned.
+
+const buildArtefacts = root => {
+  const write = (rel, text) => {
+    const full = Path.join(root, rel)
+    Fs.mkdirSync(Path.dirname(full), { recursive: true })
+    Fs.writeFileSync(full, text)
+  }
+  // Each of these tripped a different check on the first real run.
+  write('docs/slidev/node_modules/katex/README.md', '# katex\n\n$$ref$$\n')
+  write('docs/slidev/node_modules/@slidev/client/index.html', '<html><body>no title</body></html>')
+  write('docs/slidev/node_modules/tiny/README.md', 'stub')
+  write('docs/slidev/dist/index.html', '<html><body>built deck</body></html>')
+}
+
+test('a built presentation does not make the documentation look broken', () => {
+  const root = build()
+  try {
+    assert.deepStrictEqual(failures(root), [])
+    buildArtefacts(root)
+    assert.deepStrictEqual(failures(root), [],
+      'a Slidev toolchain inside docs/ is not documentation')
+  } finally { Fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+test('ignoring the toolchain does not blind the checks to real pages', () => {
+  const root = build()
+  try {
+    buildArtefacts(root)
+    // A stub page OUTSIDE the ignored directories must still be caught, or
+    // the exclusion has been written as a blanket the checks cannot see past.
+    Fs.writeFileSync(Path.join(root, 'docs/guides/errors.html'), '<html><title>e</title>x</html>')
+    assert.ok(failures(root).includes('no page is a stub'))
+  } finally { Fs.rmSync(root, { recursive: true, force: true }) }
+})
+
+test('a stub directly inside the presentation output is still caught', () => {
+  const root = build()
+  try {
+    // Only node_modules and dist are toolchain. The deck's own source is not.
+    Fs.writeFileSync(Path.join(root, 'docs/slidev/slides.md'), '# t\n')
+    assert.ok(failures(root).includes('no page is a stub'))
+  } finally { Fs.rmSync(root, { recursive: true, force: true }) }
+})

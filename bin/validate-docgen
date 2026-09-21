@@ -35,6 +35,7 @@ GEN_TIMEOUT_DEFAULT=1800
 QA_TIMEOUT_DEFAULT=600
 SCORE_TIMEOUT_DEFAULT=900
 SCORE_SCOPE_DEFAULT=all
+DECK_TIMEOUT_DEFAULT=900
 FETCH_TIMEOUT_DEFAULT=900
 
 usage() {
@@ -56,6 +57,9 @@ Usage: validate-docgen [options]
   --no-fetch                 Require the cache to be populated already
   --no-qa                    Skip the voxgig-docgen qa phase
   --vale                     Let qa run Vale (default: --local-only)
+  --no-decks                 Skip building the presentation decks. The
+                             documentation links to a built deck, so qa will
+                             report that link broken; pair with --no-qa.
   --no-score                 Skip the prose-score phase
   --max-density <n>          Fail an SDK whose weighted alerts per 1000 words
                              exceed <n>. Unset, the score is recorded but
@@ -72,6 +76,7 @@ Usage: validate-docgen [options]
   --gen-timeout <s>          (default: ${GEN_TIMEOUT_DEFAULT})
   --qa-timeout <s>           (default: ${QA_TIMEOUT_DEFAULT})
   --score-timeout <s>        (default: ${SCORE_TIMEOUT_DEFAULT})
+  --deck-timeout <s>         (default: ${DECK_TIMEOUT_DEFAULT})
   -h, --help
 
 Spec list format: <name>:<repo>:<spec-file under the repo's .sdk/def/>
@@ -91,6 +96,7 @@ DOCGEN_PATH=""
 NO_FETCH=0
 NO_QA=0
 VALE=0
+NO_DECKS=0
 NO_SCORE=0
 MAX_DENSITY=""
 SCORE_SCOPE=""
@@ -103,6 +109,7 @@ BUILD_TIMEOUT="${BUILD_TIMEOUT_DEFAULT}"
 GEN_TIMEOUT="${GEN_TIMEOUT_DEFAULT}"
 QA_TIMEOUT="${QA_TIMEOUT_DEFAULT}"
 SCORE_TIMEOUT="${SCORE_TIMEOUT_DEFAULT}"
+DECK_TIMEOUT="${DECK_TIMEOUT_DEFAULT}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -119,6 +126,7 @@ while [ $# -gt 0 ]; do
     --no-fetch)           NO_FETCH=1; shift;;
     --no-qa)              NO_QA=1; shift;;
     --vale)               VALE=1; shift;;
+    --no-decks)           NO_DECKS=1; shift;;
     --no-score)           NO_SCORE=1; shift;;
     --max-density)        MAX_DENSITY="$2"; shift 2;;
     --score-scope)        SCORE_SCOPE="$2"; shift 2;;
@@ -131,6 +139,7 @@ while [ $# -gt 0 ]; do
     --gen-timeout)        GEN_TIMEOUT="$2"; shift 2;;
     --qa-timeout)         QA_TIMEOUT="$2"; shift 2;;
     --score-timeout)      SCORE_TIMEOUT="$2"; shift 2;;
+    --deck-timeout)       DECK_TIMEOUT="$2"; shift 2;;
     -h|--help)            usage; exit 0;;
     *) echo "ERROR: unknown option: $1" >&2; usage >&2; exit 2;;
   esac
@@ -191,6 +200,7 @@ say() { echo "$*" | tee -a "${SUMMARY}"; }
   echo "config docgen_path=${DOCGEN_PATH}"
   echo "config qa=$([ "${NO_QA}" = 1 ] && echo off || echo on)"
   echo "config vale=$([ "${VALE}" = 1 ] && echo on || echo off)"
+  echo "config decks=$([ "${NO_DECKS}" = 1 ] && echo off || echo on)"
   echo "config score=$([ "${NO_SCORE}" = 1 ] && echo off || echo on)"
   echo "config score_scope=${SCORE_SCOPE}"
   echo "config max_density=${MAX_DENSITY}"
@@ -258,13 +268,28 @@ if [ "${NO_SCORE}" = 0 ]; then
   esac
 fi
 
+# Digest exactly what docgen says it generated, not a walk of docs/. The walk
+# was wrong in both directions: it missed everything written outside that
+# folder (the workflow, the QA manifest, the style guide), and once the decks
+# are built it would swallow a presentation's dist/ and its 500MB of
+# node_modules, which regeneration neither writes nor restores.
 docs_digest() {
   local root="$1"
-  { [ -f "${root}/SUMMARY.md" ] && cat "${root}/SUMMARY.md"
-    find "${root}/docs" -type f 2>/dev/null | LC_ALL=C sort | while read -r f; do
-      echo "${f#${root}/}"; cat "${f}"
-    done
-  } 2>/dev/null | "${HASHER}" | cut -d' ' -f1
+  node -e '
+    const Fs = require("node:fs"), Path = require("node:path")
+    const root = process.argv[1]
+    const listing = Path.join(root, ".sdk/doc/generated.json")
+    const files = JSON.parse(Fs.readFileSync(listing, "utf8")).files
+    if (!Array.isArray(files) || !files.length) throw new Error("no generated files listed")
+    for (const file of [...files].sort()) {
+      const full = Path.join(root, file)
+      process.stdout.write(file + "\n")
+      // A listed file that regeneration deleted must change the digest, so it
+      // is recorded as absent rather than skipped.
+      process.stdout.write(Fs.existsSync(full) ? Fs.readFileSync(full) : "<ABSENT>")
+      process.stdout.write("\n")
+    }
+  ' "${root}" 2>/dev/null | "${HASHER}" | cut -d" " -f1
 }
 
 # A populated cache is REFRESHED, not reused as-is. Skipping the fetch would
@@ -390,7 +415,35 @@ while IFS= read -r line || [ -n "${line}" ]; do
   echo "${name}_generate_rc=${rc}" >> "${SUMMARY}"
   [ "${rc}" = 0 ] || { say "!! [${name}] generate FAILED rc=${rc}"; continue; }
 
-  # 8. documentation checks
+  # 8. presentation decks
+  #
+  # The generated workflow builds every deck BEFORE it runs qa, and the
+  # website links to the built deck rather than to its Slidev source. A run
+  # that skips this does not find a docgen defect; it finds its own missing
+  # step, and reports a broken link on every page of every SDK.
+  if [ "${NO_DECKS}" = 0 ]; then
+    decks="$(node -e '
+      const m = require(process.argv[1] + "/.sdk/model/sdk.json")
+      const editions = m.main?.kit?.doc?.edition || {}
+      process.stdout.write(Object.values(editions)
+        .filter(e => e && "presentation" === e.kind && false !== e.active)
+        .map(e => e.output?.path).filter(Boolean).join("\n"))
+    ' "${folder}" 2>/dev/null)"
+    deck_rc=0
+    for deck in ${decks}; do
+      say ">> [${name}] deck ${deck}"
+      (cd "${folder}" && run_with_timeout "${DECK_TIMEOUT}" \
+        npm install --prefix "${deck}" --no-audit --no-fund) \
+        >> "${log_base}.deck.log" 2>&1 || { deck_rc=$?; continue; }
+      (cd "${folder}" && run_with_timeout "${DECK_TIMEOUT}" \
+        npm run build --prefix "${deck}") \
+        >> "${log_base}.deck.log" 2>&1 || deck_rc=$?
+    done
+    echo "${name}_deck_rc=${deck_rc}" >> "${SUMMARY}"
+    [ "${deck_rc}" = 0 ] || { say "!! [${name}] deck FAILED rc=${deck_rc}"; continue; }
+  fi
+
+  # 9. documentation checks
   say ">> [${name}] check"
   "${REPO_DIR}/bin/check-docs" --json "${folder}" > "${log_base}.check.json" 2>"${log_base}.check.log"
   rc=$?
@@ -404,7 +457,7 @@ while IFS= read -r line || [ -n "${line}" ]; do
     echo "${name}_checks_total=${counts##* }" >> "${SUMMARY}"
   fi
 
-  # 9. text QA
+  # 10. text QA
   if [ "${NO_QA}" = 0 ]; then
     say ">> [${name}] qa"
     qa_args=""
@@ -415,7 +468,7 @@ while IFS= read -r line || [ -n "${line}" ]; do
     echo "${name}_qa_rc=$?" >> "${SUMMARY}"
   fi
 
-  # 10. prose score
+  # 11. prose score
   #
   # qa answers "is anything forbidden present". This asks "how is the prose
   # doing", over the same rules and the same text, as a number that can be
@@ -466,7 +519,7 @@ while IFS= read -r line || [ -n "${line}" ]; do
     echo "${name}_score_rc=${score_rc}" >> "${SUMMARY}"
   fi
 
-  # 11. byte stability - the same model must render the same documentation.
+  # 12. byte stability - the same model must render the same documentation.
   if [ "${NO_RERUN}" = 0 ]; then
     say ">> [${name}] rerun"
     before="$(docs_digest "${folder}")"
@@ -476,6 +529,11 @@ while IFS= read -r line || [ -n "${line}" ]; do
     after="$(docs_digest "${folder}")"
     if [ "${rc}" != 0 ]; then
       echo "${name}_rerun_rc=${rc}" >> "${SUMMARY}"
+    elif [ -z "${before}" ] || [ -z "${after}" ]; then
+      # Two digests that both failed to compute compare equal, which is the
+      # one way this gate can report stability it never measured.
+      echo "${name}_rerun_rc=1" >> "${SUMMARY}"
+      echo "could not digest the generated documentation" >> "${log_base}.rerun.log"
     elif [ "${before}" = "${after}" ]; then
       echo "${name}_rerun_rc=0" >> "${SUMMARY}"
     else
@@ -487,6 +545,7 @@ while IFS= read -r line || [ -n "${line}" ]; do
   ok=1
   grep -q "^${name}_check_rc=0$" "${SUMMARY}" || ok=0
   [ "${NO_QA}" = 1 ] || grep -q "^${name}_qa_rc=0$" "${SUMMARY}" || ok=0
+  [ "${NO_DECKS}" = 1 ] || grep -q "^${name}_deck_rc=0$" "${SUMMARY}" || ok=0
   [ "${NO_SCORE}" = 1 ] || grep -q "^${name}_score_rc=0$" "${SUMMARY}" || ok=0
   [ "${NO_RERUN}" = 1 ] || grep -q "^${name}_rerun_rc=0$" "${SUMMARY}" || ok=0
   if [ "${ok}" = 1 ]; then PASSED=$((PASSED + 1)); say "++ [${name}] PASS"

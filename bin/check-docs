@@ -23,12 +23,19 @@ function read(file) {
   try { return Fs.readFileSync(file, 'utf8') } catch (e) { return null }
 }
 
+// A presentation edition is a Slidev project, so building it (which the
+// generated workflow does before qa, and so does this harness) drops a
+// toolchain and its build output inside the documentation tree. Neither is
+// documentation: a dependency's README is a stub, its bundled pages have no
+// title, and one of them contains a literal $$ref$$.
+const NOT_DOCUMENTATION = new Set(['node_modules', 'dist'])
+
 function walk(dir, out = []) {
   let entries
   try { entries = Fs.readdirSync(dir, { withFileTypes: true }) } catch (e) { return out }
   for (const entry of entries) {
     const full = Path.join(dir, entry.name)
-    if (entry.isDirectory()) walk(full, out)
+    if (entry.isDirectory()) { if (!NOT_DOCUMENTATION.has(entry.name)) walk(full, out) }
     else out.push(full)
   }
   return out

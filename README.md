@@ -47,13 +47,17 @@ For each SDK:
 4. **edition add** — `summary`, `github-pages`, `presentation`
 5. **build** — `npm run build` in `<out>/.sdk`
 6. **generate** — `npm run generate`
-7. **check** — `bin/check-docs`
-8. **qa** — `voxgig-docgen qa`
-9. **score** — `bin/prose-score`, a deterministic prose score over the same
-   Vale rules (below). Recorded always; a gate only with `--max-density`.
-10. **rerun** — regenerate, and require the documentation to be byte-identical
+7. **deck** — build every presentation edition, exactly as the generated
+   workflow does before it runs qa. The website links to the BUILT deck, so
+   skipping this reports a broken link on every page. `--no-decks` opts out.
+8. **check** — `bin/check-docs`
+9. **qa** — `voxgig-docgen qa`
+10. **score** — `bin/prose-score`, a deterministic prose score over the same
+    Vale rules (below). Recorded always; a gate only with `--max-density`.
+11. **rerun** — regenerate, and require the files docgen recorded as generated
+    to be byte-identical
 
-An SDK passes when 7, 8, 9 and 10 all succeed.
+An SDK passes when 7 through 11 all succeed.
 
 ## The prose score
 
@@ -152,6 +156,9 @@ make full  ARGS='--max-density 15'      # make the prose score a gate
 `node`, `npm` and `git`. Network access to npm and to github.com, unless the
 SDK repos are already cloned into the cache and `--no-fetch` is passed.
 
+The deck phase installs Slidev per SDK, which is roughly 500MB and a minute
+each. `--no-decks` skips it, at the cost of a broken-link report from qa.
+
 Vale is optional for the **qa** phase: without `--vale` it runs `--local-only`,
 which keeps the prose and link checks and skips the Vale pass.
 
@@ -176,38 +183,38 @@ published `@voxgig/create-sdkgen`, which is exactly what a consumer gets.
 
 ## Findings
 
-### The presentation edition breaks the QA link check
+### A missing phase, not a docgen defect (corrected)
 
-With all three editions active, `voxgig-docgen qa` fails on freshly generated
-output for every SDK, with one broken link per page:
+An earlier version of this file recorded the broken Slidev link as a docgen
+defect. It was a defect in this harness, and the correction matters more than
+the original report: the harness had every SDK failing for a reason that was
+its own.
+
+`voxgig-docgen qa` did fail on freshly generated output for every SDK, once
+per page:
 
 ```
-docs/index.html:    broken local link: slidev/index.html
+docs/index.html:     broken local link: slidev/index.html
 docs/api/index.html: broken local link: ../slidev/index.html
-... (one per emitted page)
 ```
 
-The `github-pages` edition puts a navigation link to `slidev/index.html` on
-every page when `presentation` is active. The QA manifest routes that target to
-`docs/slidev/dist/index.html`, which only exists after the Slidev deck is
-built. `presentation` emits `slides.md` and its sources, not a built deck, so
-at QA time the target is absent.
+The `github-pages` edition links to the BUILT deck, and the QA manifest
+already routes that target to `docs/slidev/dist/index.html`. The generated
+workflow builds every deck before it runs qa. This harness did not, so the
+target was genuinely absent and the link check was right to say so.
 
-Docgen's own CI does not see this. `ts/build/qa-fixture.cjs` builds a fixture
-with `routes: {}` and no page that links to Slidev, because the fixture does
-not activate `presentation`. The combination of `github-pages` and
-`presentation` is exactly what a real project gets, and it is the one
-combination the fixture omits.
+Building the deck and re-running qa settles it:
 
-Isolation, reproducible with this harness:
+```
+$ npm install --prefix docs/slidev && npm run build --prefix docs/slidev
+$ voxgig-docgen qa --local-only
+Text QA passed: 13 files
+```
 
-| editions | doc checks | text QA | byte-stable |
-| --- | --- | --- | --- |
-| `summary,github-pages,presentation` | 17/17 | **fails**, 10 broken links | yes |
-| `summary,github-pages` | 16/16 | passes | yes |
-
-Everything else in the pipeline is sound: the documentation describes the model
-correctly in both configurations, and regenerating is byte-identical.
+There is now a **deck** phase that does what the workflow does. The lesson is
+the one this repo already states about checks: a harness that omits a phase of
+the pipeline it validates does not report a gap in the tool, it reports a gap
+in itself, and it looks exactly the same from the outside.
 
 ### The prose gate reads a fraction of the documentation
 
@@ -216,13 +223,16 @@ table cells. A generated API reference keeps the vendor's schema descriptions
 in exactly those cells, so most of what a reader sees is never linted. The
 score phase measures both scopes, which makes the gap a number:
 
-| SDK | words linted | words rendered | linted |
-| --- | ---: | ---: | ---: |
-| `openfoodfacts` | 2324 | 3431 | 68% |
-| `univec` | 2653 | 3370 | 79% |
-| `hubspotmarketing` | 22509 | 101158 | **22%** |
+| SDK | schemas | words linted | words rendered | linted |
+| --- | ---: | ---: | ---: | ---: |
+| `aareguru` | 0 | 2675 | 2736 | 98% |
+| `univec` | 11 | 2653 | 3370 | 79% |
+| `carbonintensity` | 13 | 3876 | 5445 | 71% |
+| `openfoodfacts` | 4 | 2324 | 3431 | 68% |
+| `hubspotmarketing` | 313 | 22509 | 101158 | **22%** |
 
-The gap tracks schema count, because schemas are what fills the tables. At the
+`aareguru` is the control: it declares no component schemas at all, so it has
+almost no table content, and almost nothing is hidden from the gate. At the
 ceiling case Vale reads roughly one word in five.
 
 ### The rules judge text docgen did not write

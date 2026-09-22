@@ -54,9 +54,20 @@ neither subsumes the other.
   summarizer parses only that; do not make it read the phase logs.
 - A non-zero rc for a phase after the first failure is not recorded, because
   the driver moves to the next SDK. Absent means "not reached", not "passed".
+  The same holds one level up: a run whose `summary.log` carries no `result`
+  record was killed rather than completed, and `REPORT.md` says so above the
+  count instead of presenting the SDKs it never started as failures.
 - Spec list format is `<name>:<repo>:<spec-file>`, resolved against the repo's
   own `.sdk/def/`. The SDKs are the source of truth for their specs; this repo
   does not vendor copies that can drift.
+- `REPORT.md` and `report.json` are GENERATED from `summary.log`. Never hand-edit
+  one: the next `make summarize` silently reverts it, and a hand-written line is
+  indistinguishable from a measured one. A condition the run was performed under
+  goes in `--note <text>`, which the summarizer prints above the count, and the
+  versions of the tools each project resolved are recorded by the run itself.
+- Do not restate a run's result anywhere else in this repository. `README.md`
+  links to the report instead of repeating its count, because the copy is what
+  goes stale: it read `0/5` while the report beside it read `5/5`.
 
 ## Source code comments
 

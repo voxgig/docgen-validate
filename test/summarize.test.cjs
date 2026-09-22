@@ -7,7 +7,7 @@
 const test = require('node:test')
 const assert = require('node:assert')
 
-const { parse } = require('../bin/summarize')
+const { parse, render } = require('../bin/summarize')
 
 const LOG = [
   'config specs=specs/default.txt',
@@ -22,6 +22,9 @@ const LOG = [
   'config started=2026-09-21T00:00:00Z',
   'sdk=hubspot-marketing repo=voxgig-sdk/x-sdk spec=x.json',
   'hubspot-marketing_fetch_rc=0',
+  'hubspot-marketing_version_docgen=0.25.0',
+  'hubspot-marketing_version_sdkgen=4.23.0',
+  'hubspot-marketing_version_apidef=8.15.0',
   'hubspot-marketing_scaffold_rc=0',
   'hubspot-marketing_build_rc=0',
   'hubspot-marketing_generate_rc=0',
@@ -119,4 +122,117 @@ test('the deck phase is parsed, and a deck failure is not lost', () => {
 test('decks off is carried through so the report does not claim the phase ran', () => {
   const off = LOG.replace('config decks=on', 'config decks=off')
   assert.strictEqual(parse(off).config.decks, 'off')
+})
+
+// A run note carries the condition the run was performed under - an
+// environment workaround, a narrowed selection - and it is worth recording
+// only if it reaches the page a reader looks at, above the headline count.
+
+test('a run note is reprinted above the headline count', () => {
+  const noted = LOG.replace('config rerun=on',
+    'config rerun=on\nconfig note=@tabnas/parser forced to 0.10.0 in each project')
+  const report = render(parse(noted), '20260922T000000Z')
+  assert.match(report, /> \*\*Run note:\*\* @tabnas\/parser forced to 0\.10\.0 in each project/)
+  assert.ok(report.indexOf('Run note') < report.indexOf('SDKs fully validated'),
+    'the note must precede the count it qualifies')
+})
+
+test('a run without a note claims no condition', () => {
+  assert.ok(!render(parse(LOG), '20260922T000000Z').includes('Run note'))
+})
+
+// A run that names no version cannot be told apart from a run against a
+// release two behind, so the versions are recorded per SDK and reprinted.
+
+test('the tool versions a run exercised are parsed and reported', () => {
+  assert.deepStrictEqual(only(LOG).versions,
+    { docgen: '0.25.0', sdkgen: '4.23.0', apidef: '8.15.0' })
+  assert.match(render(parse(LOG), 'r'), /- tools: docgen 0\.25\.0, sdkgen 4\.23\.0, apidef 8\.15\.0/)
+})
+
+test('an SDK whose versions were never recorded claims none', () => {
+  const bare = LOG.split('\n').filter(l => !l.includes('_version_')).join('\n')
+  assert.strictEqual(only(bare).versions, undefined)
+  assert.ok(!render(parse(bare), 'r').includes('- tools:'))
+})
+
+test('a version line naming an SDK the log never announced is ignored', () => {
+  const stray = parse(LOG + '\nghost_version_docgen=9.9.9\n')
+  assert.strictEqual(stray.sdks.length, 1)
+  assert.strictEqual(stray.sdks[0].versions.docgen, '0.25.0')
+})
+
+// The scaffold install is how an ephemeral dependency override reaches a
+// project. It has to survive the parse - the phase list has no `install`
+// token - and it has to reach the report, or a run that forced a package
+// reads as an ordinary one.
+
+test('a scaffold install is parsed and named in the report', () => {
+  const forced = LOG.replace('config qa=on',
+    'config scaffold_install=@tabnas/parser@0.10.0\nconfig qa=on')
+    .replace('hubspot-marketing_scaffold_rc=0',
+      'hubspot-marketing_scaffold_rc=0\nhubspot-marketing_scaffold_install_rc=0')
+  const data = parse(forced)
+  assert.strictEqual(data.sdks[0].scaffold_install_rc, 0)
+  const report = render(data, 'r')
+  assert.match(report, /Scaffold install: `@tabnas\/parser@0\.10\.0`/)
+  assert.match(report, /- scaffold-install: ok/)
+})
+
+test('a failed scaffold install is reported as a failure', () => {
+  const broken = LOG.replace('hubspot-marketing_scaffold_rc=0',
+    'hubspot-marketing_scaffold_rc=0\nhubspot-marketing_scaffold_install_rc=1')
+  assert.strictEqual(only(broken).scaffold_install_rc, 1)
+  assert.match(render(parse(broken), 'r'), /- scaffold-install: FAIL/)
+})
+
+test('a run that forced nothing says nothing about a scaffold install', () => {
+  const report = render(parse(LOG), 'r')
+  assert.ok(!report.includes('Scaffold install'))
+  assert.ok(!report.includes('scaffold-install'))
+})
+
+// A run the container killed records no `result` line. Reading that as
+// measured failures is the same mistake as reading an absent phase as a pass,
+// one level up: the count is of SDKs the run never got to.
+
+test('a run that recorded no result is marked incomplete', () => {
+  const killed = LOG.split('\n').filter(l => !l.startsWith('result ')).join('\n')
+  const report = render(parse(killed), '20260922T000000Z')
+  assert.match(report, /> \*\*Incomplete run:\*\*/)
+  assert.ok(report.indexOf('Incomplete run') < report.indexOf('SDKs fully validated'),
+    'the qualification must precede the count it qualifies')
+})
+
+test('a run that finished claims no incompleteness', () => {
+  assert.ok(!render(parse(LOG), 'r').includes('Incomplete run'))
+})
+
+// The report is the only place absence is spelled out. Every phase the run
+// stopped short of has to be NAMED, or a reader counts the ok cells and reads
+// a short row as a clean one.
+
+test('phases the run never reached are named, not called clean', () => {
+  const stopped = LOG.split('\n')
+    .filter(l => !/_(qa|score|rerun)_rc=/.test(l) && !/_(density|words|errors|warnings|suggestions|score)_(authored|all)=/.test(l))
+    .join('\n')
+  const report = render(parse(stopped), 'r')
+  assert.match(report, /- phases not reached: qa, score, rerun/)
+  assert.ok(!report.includes('all phases clean'))
+})
+
+test('a phase the run was told to skip is not reported as unreached', () => {
+  const off = LOG.split('\n')
+    .filter(l => !/_rerun_rc=/.test(l))
+    .join('\n')
+    .replace('config rerun=on', 'config rerun=off')
+  const report = render(parse(off), 'r')
+  assert.ok(!report.includes('phases not reached'))
+  assert.match(report, /- all phases clean/)
+})
+
+test('a failed phase is named as failed rather than merely absent', () => {
+  const report = render(parse(LOG.replace('_qa_rc=0', '_qa_rc=1')), 'r')
+  assert.match(report, /- failed phases: qa/)
+  assert.ok(!report.includes('all phases clean'))
 })

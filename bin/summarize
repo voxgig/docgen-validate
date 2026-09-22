@@ -22,6 +22,12 @@ function parse(text) {
       if (!sdks[match[1]]) { sdks[match[1]] = { name: match[1], repo: match[2], spec: match[3] }; order.push(match[1]) }
       continue
     }
+    // Matched before the phase list below, which has no `install` token and
+    // would otherwise drop the line without a trace.
+    if ((match = line.match(/^(.+?)_scaffold_install_rc=(-?\d+)$/))) {
+      const sdk = sdks[match[1]]
+      if (sdk) { sdk.scaffold_install_rc = Number(match[2]); continue }
+    }
     // An SDK name may contain characters `\w` does not cover (a hyphen, say),
     // so the name is matched against the names `sdk=` already announced rather
     // than by a character class that silently drops those records.
@@ -35,6 +41,10 @@ function parse(text) {
         sdk[match[2] + 's'][match[3]] = Number(match[4])
         continue
       }
+    }
+    if ((match = line.match(/^(.+?)_version_([\w-]+)=(\S*)$/))) {
+      const sdk = sdks[match[1]]
+      if (sdk) { sdk.versions = sdk.versions || {}; sdk.versions[match[2]] = match[3]; continue }
     }
     // Prose metrics are recorded per scope, so `_rc` above must be matched
     // first: `score` is both a phase and a metric name.
@@ -100,22 +110,17 @@ function proseTable(data) {
   ]
 }
 
-function main() {
-  const args = process.argv.slice(2)
-  const at = args.indexOf('--run-dir')
-  if (at < 0) { console.error('usage: summarize --run-dir <dir>'); process.exit(2) }
-  const runDir = Path.resolve(args[at + 1])
-  const summary = Path.join(runDir, 'summary.log')
-  if (!Fs.existsSync(summary)) { console.error('no summary.log in ' + runDir); process.exit(2) }
-
-  const data = parse(Fs.readFileSync(summary, 'utf8'))
+function render(data, runName) {
   const passed = data.config.passed ?? 0
   const total = data.config.total ?? data.sdks.length
+  // The driver writes `result passed=` last. Without it the run was killed
+  // rather than completed, and a bare count would read as measured failures.
+  const complete = undefined !== data.config.passed
 
   const lines = [
     '# docgen-validate run',
     '',
-    `Run: \`${Path.basename(runDir)}\``,
+    `Run: \`${runName}\``,
     '',
     `- Started: ${data.config.started || '?'}`,
     `- Finished: ${data.config.finished || '?'}`,
@@ -132,7 +137,17 @@ function main() {
       [`- **Docgen: local checkout \`${data.config.docgen_path}\`, not the published package.**`] : []),
     ...(data.config.create_sdkgen_path ?
       [`- **create-sdkgen: local checkout \`${data.config.create_sdkgen_path}\`.**`] : []),
+    ...(data.config.scaffold_install ?
+      [`- **Scaffold install: \`${data.config.scaffold_install}\` forced into each project,` +
+        ' ephemerally and unsaved.**'] : []),
     '',
+    // A condition the run was performed under travels with the result or it
+    // travels nowhere: the reader of a pasted table has no other source for it.
+    ...(data.config.note ? [`> **Run note:** ${data.config.note}`, ''] : []),
+    ...(complete ? [] : [
+      '> **Incomplete run:** `summary.log` carries no `result` record, so the driver',
+      '> never reached the end of the SDK list. Only what is recorded below was',
+      '> measured; an SDK the run never started is absent, not failing.', '']),
     `**${passed}/${total} SDKs fully validated.**`,
     '',
     'An SDK passes when the deck build, the documentation checks, the text QA',
@@ -158,6 +173,12 @@ function main() {
     if (undefined !== sdk.checks_total) {
       lines.push(`- documentation checks: ${sdk.checks_pass}/${sdk.checks_total}`)
     }
+    if (undefined !== sdk.scaffold_install_rc) {
+      lines.push(`- scaffold-install: ${mark(sdk.scaffold_install_rc)}`)
+    }
+    if (sdk.versions) {
+      lines.push('- tools: ' + Object.entries(sdk.versions).map(([k, v]) => `${k} ${v}`).join(', '))
+    }
     for (const scope of SCOPES) {
       const at = sdk.prose?.[scope]
       if (!at) continue
@@ -180,7 +201,19 @@ function main() {
     lines.push('')
   }
 
-  Fs.writeFileSync(Path.join(runDir, 'REPORT.md'), lines.join('\n'))
+  return lines.join('\n')
+}
+
+function main() {
+  const args = process.argv.slice(2)
+  const at = args.indexOf('--run-dir')
+  if (at < 0) { console.error('usage: summarize --run-dir <dir>'); process.exit(2) }
+  const runDir = Path.resolve(args[at + 1])
+  const summary = Path.join(runDir, 'summary.log')
+  if (!Fs.existsSync(summary)) { console.error('no summary.log in ' + runDir); process.exit(2) }
+
+  const data = parse(Fs.readFileSync(summary, 'utf8'))
+  Fs.writeFileSync(Path.join(runDir, 'REPORT.md'), render(data, Path.basename(runDir)))
   Fs.writeFileSync(Path.join(runDir, 'report.json'),
     JSON.stringify({ config: data.config, sdks: data.sdks }, null, 2) + '\n')
   console.log(`wrote ${Path.join(runDir, 'REPORT.md')}`)
@@ -188,4 +221,4 @@ function main() {
 }
 
 if (require.main === module) main()
-module.exports = { parse }
+module.exports = { parse, render }

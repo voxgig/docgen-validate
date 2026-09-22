@@ -6,6 +6,7 @@
 # For each SDK in the list:
 #   1. fetch      shallow-clone the SDK repo, take its .sdk/def/<spec>
 #   2. scaffold   npm create @voxgig/sdkgen@latest <name> -- --def <spec> --folder <out>
+#  2b. scaffold-install  npm install --no-save <spec>  (only with --scaffold-install)
 #   3. overlay    optional: scaffold-owned src/ from a local create-sdkgen checkout
 #   4. target     voxgig-sdkgen target add <lang>   (docs describe the targets)
 #   5. edition    voxgig-sdkgen edition add <name>  (summary, github-pages, presentation)
@@ -54,6 +55,15 @@ Usage: validate-docgen [options]
                              create-sdkgen checkout. Needed while the compact
                              apidef schema migration is unreleased on npm.
   --docgen-path <dir>        Override @voxgig/docgen in <out>/.sdk with a checkout
+  --scaffold-install <spec>  Force <spec> (a package@version) into the
+                             scaffolded project's own .sdk while its
+                             dependency tree is built. Repeatable. The
+                             scaffold is created with --no-install, because
+                             the install it would run is the one that runs the
+                             project's postinstall, and an override applied
+                             after that install is an override applied too
+                             late. Nothing is saved to a manifest: the
+                             override lives and dies with the run directory.
   --no-fetch                 Require the cache to be populated already
   --no-qa                    Skip the voxgig-docgen qa phase
   --vale                     Let qa run Vale (default: --local-only)
@@ -70,6 +80,10 @@ Usage: validate-docgen [options]
   --no-rerun                 Skip the byte-stability phase
   --keep                     Keep existing project folders instead of removing
   --no-summary               Skip writing REPORT.md / report.json
+  --note <text>              One line recorded with the run and reprinted at
+                             the top of REPORT.md. For a condition a reader
+                             has to know to read the result: an environment
+                             workaround, a deliberately narrowed selection.
   --scaffold-timeout <s>     (default: ${SCAFFOLD_TIMEOUT_DEFAULT})
   --target-timeout <s>       (default: ${TARGET_TIMEOUT_DEFAULT})
   --build-timeout <s>        (default: ${BUILD_TIMEOUT_DEFAULT})
@@ -93,6 +107,7 @@ EDITIONS="${EDITIONS_DEFAULT}"
 ONLY=""
 CREATE_SDKGEN_PATH=""
 DOCGEN_PATH=""
+SCAFFOLD_INSTALL=()
 NO_FETCH=0
 NO_QA=0
 VALE=0
@@ -103,6 +118,7 @@ SCORE_SCOPE=""
 NO_RERUN=0
 KEEP=0
 NO_SUMMARY=0
+NOTE=""
 SCAFFOLD_TIMEOUT="${SCAFFOLD_TIMEOUT_DEFAULT}"
 TARGET_TIMEOUT="${TARGET_TIMEOUT_DEFAULT}"
 BUILD_TIMEOUT="${BUILD_TIMEOUT_DEFAULT}"
@@ -123,6 +139,7 @@ while [ $# -gt 0 ]; do
     --only)               ONLY="$2"; shift 2;;
     --create-sdkgen-path) CREATE_SDKGEN_PATH="$2"; shift 2;;
     --docgen-path)        DOCGEN_PATH="$2"; shift 2;;
+    --scaffold-install)   SCAFFOLD_INSTALL+=("$2"); shift 2;;
     --no-fetch)           NO_FETCH=1; shift;;
     --no-qa)              NO_QA=1; shift;;
     --vale)               VALE=1; shift;;
@@ -133,6 +150,9 @@ while [ $# -gt 0 ]; do
     --no-rerun)           NO_RERUN=1; shift;;
     --keep)               KEEP=1; shift;;
     --no-summary)         NO_SUMMARY=1; shift;;
+    # summary.log is one record per line, so a newline would silently truncate
+    # the note to its first line.
+    --note)               NOTE="$(printf '%s' "$2" | tr '\n' ' ')"; shift 2;;
     --scaffold-timeout)   SCAFFOLD_TIMEOUT="$2"; shift 2;;
     --target-timeout)     TARGET_TIMEOUT="$2"; shift 2;;
     --build-timeout)      BUILD_TIMEOUT="$2"; shift 2;;
@@ -198,6 +218,7 @@ say() { echo "$*" | tee -a "${SUMMARY}"; }
   echo "config editions=${EDITIONS}"
   echo "config create_sdkgen_path=${CREATE_SDKGEN_PATH}"
   echo "config docgen_path=${DOCGEN_PATH}"
+  echo "config scaffold_install=${SCAFFOLD_INSTALL[*]:-}"
   echo "config qa=$([ "${NO_QA}" = 1 ] && echo off || echo on)"
   echo "config vale=$([ "${VALE}" = 1 ] && echo on || echo off)"
   echo "config decks=$([ "${NO_DECKS}" = 1 ] && echo off || echo on)"
@@ -205,6 +226,7 @@ say() { echo "$*" | tee -a "${SUMMARY}"; }
   echo "config score_scope=${SCORE_SCOPE}"
   echo "config max_density=${MAX_DENSITY}"
   echo "config rerun=$([ "${NO_RERUN}" = 1 ] && echo off || echo on)"
+  echo "config note=${NOTE}"
   echo "config started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } >> "${SUMMARY}"
 
@@ -360,12 +382,26 @@ while IFS= read -r line || [ -n "${line}" ]; do
 
   # 2. scaffold
   say ">> [${name}] scaffold"
+  scaffold_flags=""
+  [ ${#SCAFFOLD_INSTALL[@]} -gt 0 ] && scaffold_flags="--no-install"
   (cd "${OUT_DIR}" && run_with_timeout "${SCAFFOLD_TIMEOUT}" \
-    npm create @voxgig/sdkgen@latest "${name}" -- --def "${spec_path}" --folder "${folder}") \
+    npm create @voxgig/sdkgen@latest "${name}" -- --def "${spec_path}" --folder "${folder}" \
+      ${scaffold_flags}) \
     > "${log_base}.scaffold.log" 2>&1
   rc=$?
   echo "${name}_scaffold_rc=${rc}" >> "${SUMMARY}"
   [ "${rc}" = 0 ] || { say "!! [${name}] scaffold FAILED rc=${rc}"; continue; }
+
+  # 2b. the deferred dependency install, with the overrides in place. It runs
+  # before any local link below, so npm cannot rewrite one while it reifies.
+  if [ ${#SCAFFOLD_INSTALL[@]} -gt 0 ]; then
+    say ">> [${name}] scaffold-install ${SCAFFOLD_INSTALL[*]}"
+    (cd "${folder}/.sdk" && run_with_timeout "${SCAFFOLD_TIMEOUT}" \
+      npm install --no-save "${SCAFFOLD_INSTALL[@]}") > "${log_base}.scaffold-install.log" 2>&1
+    rc=$?
+    echo "${name}_scaffold_install_rc=${rc}" >> "${SUMMARY}"
+    [ "${rc}" = 0 ] || { say "!! [${name}] scaffold-install FAILED rc=${rc}"; continue; }
+  fi
 
   # 3. overlay - scaffold-owned generator sources from a local checkout.
   if [ -n "${CREATE_SDKGEN_PATH}" ]; then
@@ -378,6 +414,16 @@ while IFS= read -r line || [ -n "${line}" ]; do
     rm -rf "${folder}/.sdk/node_modules/@voxgig/docgen"
     ln -s "${DOCGEN_PATH}" "${folder}/.sdk/node_modules/@voxgig/docgen"
   fi
+
+  # Which build of each tool this run actually exercised. Without it a clean
+  # report cannot be told from a clean report against a release two behind,
+  # and the overrides above make "whatever npm had" an unsafe assumption.
+  for pkg in docgen sdkgen apidef; do
+    version="$(node -e 'try { process.stdout.write(require(process.argv[1]).version) }
+      catch (e) { process.stdout.write("absent") }' \
+      "${folder}/.sdk/node_modules/@voxgig/${pkg}/package.json" 2>/dev/null)"
+    echo "${name}_version_${pkg}=${version:-absent}" >> "${SUMMARY}"
+  done
 
   # 4 and 5. targets and editions.
   #

@@ -44,6 +44,22 @@ ignored dependency directories; keep machine-specific paths and temporary
 and CI should use published versions or explicitly check out and build the
 required source revisions.
 
+`make deps` enforces the committed half of that rule: a committed dependency
+names a published npm package or a GitHub reference, and everything else is a
+finding — `file:`, `link:`, `portal:`, `workspace:`, `catalog:`, a bare
+filesystem path, a packed `.tgz`/`.zip`, a git reference to a host other than
+github.com, an off-registry `overrides`/`resolutions`, a committed lockfile
+resolving from a path or a foreign registry, a Go `replace` leaving the
+repository, a committed `go.work`, a Cargo `path` dependency leaving it, a
+committed symlink escaping it or pointing into `node_modules`, a committed
+archive, a `.npmrc` naming another registry. It judges only what git TRACKS,
+deliberately, so local wiring stays legal right up to the moment it is staged.
+It runs under `make test` and in `.githooks/pre-push` (`make hooks` installs
+the hook), so the wiring cannot leave the machine; `make deps-test` runs the
+gate's own suite. `tools/dep-gate.json` is the allowlist: every entry needs a
+reason, and the gate reports an entry that has stopped matching anything, so
+the list cannot outlive what it excused.
+
 ## What this repo is
 
 A harness that generates documentation for five real SDKs and checks it. It
@@ -60,6 +76,10 @@ list, and what `check-docs` asserts.
 `bin/check-docs` has a matching case in `test/check-docs.test.cjs` that breaks
 exactly one thing and requires that assertion to go red. When you add a check,
 add its negative case in the same change. `make test` runs them.
+
+The rule reaches the gates in `tools/` as well: every rule the dependency gate
+enforces is driven by a case in `tools/dep-gate.test.cjs` that breaks exactly
+one thing, the tree-level rules over a real git index rather than a mock.
 
 This is not ceremony. The first cut of the manifest check passed against a
 manifest with entries pointing at files that did not exist, because it only

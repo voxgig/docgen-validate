@@ -3,7 +3,7 @@ SUMMARIZE := ./bin/summarize
 SPECS_DEFAULT := specs/default.txt
 SPECS_SMOKE := specs/smoke.txt
 
-.PHONY: help smoke full validate summarize comments comments-test hooks test
+.PHONY: help smoke full validate summarize comments comments-test deps deps-test hooks test
 
 help:
 	@echo "Targets:"
@@ -12,6 +12,7 @@ help:
 	@echo "  validate            - alias for 'full'"
 	@echo "  summarize RUN=<dir> - regenerate REPORT.md / report.json for a run"
 	@echo "  test                - run this repo's own tests"
+	@echo "  deps                - check every committed dependency source"
 	@echo ""
 	@echo "Pass extra flags via ARGS, e.g.:"
 	@echo "  make smoke ARGS='--only univec'"
@@ -33,7 +34,7 @@ summarize:
 	@test -n "$(RUN)" || { echo "usage: make summarize RUN=<run-dir>"; exit 2; }
 	$(SUMMARIZE) --run-dir $(RUN)
 
-test: comments comments-test
+test: comments comments-test deps deps-test
 	node --test test/*.test.cjs
 
 comments:
@@ -41,6 +42,12 @@ comments:
 
 comments-test:
 	node --test tools/comment-gate.test.cjs
+
+deps:
+	node tools/dep-gate.cjs
+
+deps-test:
+	node --test tools/dep-gate.test.cjs
 
 hooks:
 	git config core.hooksPath .githooks

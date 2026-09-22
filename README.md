@@ -143,7 +143,11 @@ validator. These are deliberate hard failures:
   into one that cannot fail.
 - **Absent is "not reached", never "passed".** The driver abandons an SDK at
   its first failure, so later phases have no record. `REPORT.md` names them as
-  not reached instead of calling the run clean.
+  not reached instead of calling the run clean. Two cousins of that rule are
+  qualified beside the count rather than left to the reader: a run whose
+  `summary.log` has no `result` record was killed rather than completed, and a
+  run with a gate switched off validated less than the sentence under the count
+  describes.
 
 ## Usage
 

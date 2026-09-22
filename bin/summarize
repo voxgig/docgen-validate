@@ -67,6 +67,11 @@ function parse(text) {
 
 const mark = rc => undefined === rc ? '-' : 0 === rc ? 'ok' : 'FAIL'
 
+// The gates an SDK has to clear to count as passed, and the config key that
+// switches each one off.
+const GATES = [['decks', 'the deck build'], ['qa', 'the text QA gate'],
+  ['score', 'the prose score'], ['rerun', 'the byte-stability rerun']]
+
 function table(data) {
   const head = '| SDK | ' + PHASES.join(' | ') + ' | doc checks |'
   const rule = '| --- |' + PHASES.map(() => ' --- |').join('') + ' --- |'
@@ -116,6 +121,7 @@ function render(data, runName) {
   // The driver writes `result passed=` last. Without it the run was killed
   // rather than completed, and a bare count would read as measured failures.
   const complete = undefined !== data.config.passed
+  const offGates = GATES.filter(([key]) => 'off' === data.config[key]).map(([, label]) => label)
 
   const lines = [
     '# docgen-validate run',
@@ -144,6 +150,10 @@ function render(data, runName) {
     // A condition the run was performed under travels with the result or it
     // travels nowhere: the reader of a pasted table has no other source for it.
     ...(data.config.note ? [`> **Run note:** ${data.config.note}`, ''] : []),
+    // "Fully validated" is only as wide as the gates that ran, and a switched-off
+    // gate is invisible in the table, where it renders the same as not reached.
+    ...(offGates.length ? [`> **Narrowed run:** ${offGates.join(', ')} switched off, so the` +
+      ` count below does not cover ${1 === offGates.length ? 'it' : 'them'}.`, ''] : []),
     ...(complete ? [] : [
       '> **Incomplete run:** `summary.log` carries no `result` record, so the driver',
       '> never reached the end of the SDK list. Only what is recorded below was',

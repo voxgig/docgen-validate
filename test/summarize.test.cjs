@@ -236,3 +236,24 @@ test('a failed phase is named as failed rather than merely absent', () => {
   assert.match(report, /- failed phases: qa/)
   assert.ok(!report.includes('all phases clean'))
 })
+
+// A count is only as wide as the gates that ran. A switched-off gate renders
+// as `-` in the table, exactly like a phase the run never reached, so the one
+// place it can be told apart is beside the count it narrows.
+
+test('a run with a gate switched off says the count does not cover it', () => {
+  const narrowed = LOG.replace('config qa=on', 'config qa=off')
+    .replace('config rerun=on', 'config rerun=off')
+  const report = render(parse(narrowed), 'r')
+  assert.match(report, /> \*\*Narrowed run:\*\* the text QA gate, the byte-stability rerun switched off, so the count below does not cover them\./)
+  assert.ok(report.indexOf('Narrowed run') < report.indexOf('SDKs fully validated'))
+})
+
+test('one gate off is named in the singular', () => {
+  const report = render(parse(LOG.replace('config decks=on', 'config decks=off')), 'r')
+  assert.match(report, /the deck build switched off, so the count below does not cover it\./)
+})
+
+test('a run with every gate on claims no narrowing', () => {
+  assert.ok(!render(parse(LOG), 'r').includes('Narrowed run'))
+})

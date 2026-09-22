@@ -1,5 +1,34 @@
 # AGENTS.md — agent guide for `docgen-validate`
 
+## The machine is not part of this repository
+
+**This repository is worked on from more than one machine**, including
+ephemeral containers whose installed software differs from each other and from
+any developer's workstation. A toolchain, a path, or a version present in one
+of them is routinely absent in the next.
+
+Two rules follow, and both are about what this file is allowed to say:
+
+- **Never record an inventory of what is installed** as though it were a
+  property of the repository. "Every compiler is present" and "no Vale binary
+  was available" are both facts about one machine at one moment. A reader who
+  takes either as a property of the repository will skip a check that would
+  have worked, or claim a verification that never ran.
+- **Check the current environment before concluding that something cannot be
+  built, run or verified.** `command -v <tool>` settles it in a second, which
+  is cheaper than either mistake above. A note anywhere in this repository
+  saying a tool was unavailable describes the environment that note was
+  written in, never yours.
+
+What a run genuinely depends on is declared rather than assumed, so a machine
+that cannot satisfy it says so before the work starts: the Node floor is
+`engines` in `package.json`, and Vale is an exact version rather than a range
+in the same file, because a prose score is comparable between two machines
+only if they ran the same binary. The executable side already holds this line:
+`bin/validate-docgen` derives its own repo root and writes under `$TMPDIR`,
+and `.githooks/pre-push` probes for `node` instead of assuming it. No absolute
+path or named install belongs in a script either.
+
 ## Temporary local tool development
 
 Prefer local symlinks to sibling tool checkouts when developing or testing

@@ -3,12 +3,13 @@
     "specs": "specs/default.txt",
     "out": "/tmp/docgen-validate",
     "cache": "/tmp/docgen-validate/_cache",
-    "run_dir": "/tmp/docgen-validate/_runs/20260921T194254Z",
+    "run_dir": "/tmp/claude-0/-home-user/cfb18939-b702-5103-9c34-642c9ec7cecf/scratchpad/dv/run-20260922T133541Z",
     "org": "voxgig-sdk",
     "targets": "ts",
     "editions": "summary,github-pages,presentation",
     "create_sdkgen_path": "",
-    "docgen_path": "/home/user/docgen/ts",
+    "docgen_path": "",
+    "scaffold_install": "",
     "qa": "on",
     "vale": "on",
     "decks": "on",
@@ -16,8 +17,9 @@
     "score_scope": "",
     "max_density": "",
     "rerun": "on",
-    "started": "2026-09-21T19:42:54Z",
-    "finished": "2026-09-21T19:51:50Z",
+    "note": "",
+    "started": "2026-09-22T13:35:51Z",
+    "finished": "2026-09-22T13:46:23Z",
     "passed": 5,
     "total": 5
   },
@@ -28,6 +30,11 @@
       "spec": "openfoodfacts_0.1.0.json",
       "fetch_rc": 0,
       "scaffold_rc": 0,
+      "versions": {
+        "docgen": "0.26.0",
+        "sdkgen": "4.23.0",
+        "apidef": "8.15.0"
+      },
       "targets": {
         "ts": 0
       },
@@ -45,17 +52,17 @@
       "qa_rc": 0,
       "prose": {
         "authored": {
-          "score": 94,
-          "density": 6,
-          "words": 2324,
+          "score": 94.2,
+          "density": 5.8,
+          "words": 2414,
           "errors": 0,
           "warnings": 2,
           "suggestions": 8
         },
         "all": {
-          "score": 89.8,
-          "density": 10.2,
-          "words": 3431,
+          "score": 90.1,
+          "density": 9.9,
+          "words": 3521,
           "errors": 0,
           "warnings": 4,
           "suggestions": 23
@@ -70,6 +77,11 @@
       "spec": "univec-openapi.json",
       "fetch_rc": 0,
       "scaffold_rc": 0,
+      "versions": {
+        "docgen": "0.26.0",
+        "sdkgen": "4.23.0",
+        "apidef": "8.15.0"
+      },
       "targets": {
         "ts": 0
       },
@@ -87,17 +99,17 @@
       "qa_rc": 0,
       "prose": {
         "authored": {
-          "score": 93.2,
-          "density": 6.8,
-          "words": 2653,
+          "score": 93.6,
+          "density": 6.4,
+          "words": 2833,
           "errors": 0,
           "warnings": 2,
           "suggestions": 12
         },
         "all": {
-          "score": 67.1,
-          "density": 32.9,
-          "words": 3370,
+          "score": 68.7,
+          "density": 31.3,
+          "words": 3550,
           "errors": 0,
           "warnings": 33,
           "suggestions": 12
@@ -112,6 +124,11 @@
       "spec": "aareguru_0.1.0.yaml",
       "fetch_rc": 0,
       "scaffold_rc": 0,
+      "versions": {
+        "docgen": "0.26.0",
+        "sdkgen": "4.23.0",
+        "apidef": "8.15.0"
+      },
       "targets": {
         "ts": 0
       },
@@ -129,20 +146,20 @@
       "qa_rc": 0,
       "prose": {
         "authored": {
-          "score": 79.1,
-          "density": 20.9,
-          "words": 2675,
+          "score": 79,
+          "density": 21,
+          "words": 2810,
           "errors": 0,
           "warnings": 11,
-          "suggestions": 23
+          "suggestions": 26
         },
         "all": {
-          "score": 79.5,
-          "density": 20.5,
-          "words": 2736,
+          "score": 79.4,
+          "density": 20.6,
+          "words": 2871,
           "errors": 0,
           "warnings": 11,
-          "suggestions": 23
+          "suggestions": 26
         }
       },
       "score_rc": 0,
@@ -154,6 +171,11 @@
       "spec": "carbon-intensity_0.1.0.json",
       "fetch_rc": 0,
       "scaffold_rc": 0,
+      "versions": {
+        "docgen": "0.26.0",
+        "sdkgen": "4.23.0",
+        "apidef": "8.15.0"
+      },
       "targets": {
         "ts": 0
       },
@@ -171,20 +193,20 @@
       "qa_rc": 0,
       "prose": {
         "authored": {
-          "score": 84.8,
-          "density": 15.2,
-          "words": 3876,
+          "score": 84.1,
+          "density": 15.9,
+          "words": 4281,
           "errors": 0,
           "warnings": 9,
-          "suggestions": 32
+          "suggestions": 41
         },
         "all": {
-          "score": 29.7,
-          "density": 70.3,
-          "words": 5445,
+          "score": 33,
+          "density": 67,
+          "words": 5850,
           "errors": 0,
           "warnings": 110,
-          "suggestions": 53
+          "suggestions": 62
         }
       },
       "score_rc": 0,
@@ -196,6 +218,11 @@
       "spec": "hubspot-marketing-openapi.json",
       "fetch_rc": 0,
       "scaffold_rc": 0,
+      "versions": {
+        "docgen": "0.26.0",
+        "sdkgen": "4.23.0",
+        "apidef": "8.15.0"
+      },
       "targets": {
         "ts": 0
       },
@@ -213,17 +240,17 @@
       "qa_rc": 0,
       "prose": {
         "authored": {
-          "score": 72.9,
-          "density": 27.1,
-          "words": 22497,
+          "score": 76,
+          "density": 24,
+          "words": 25422,
           "errors": 0,
           "warnings": 149,
           "suggestions": 163
         },
         "all": {
-          "score": 90.8,
-          "density": 9.2,
-          "words": 100846,
+          "score": 91,
+          "density": 9,
+          "words": 103771,
           "errors": 0,
           "warnings": 252,
           "suggestions": 176

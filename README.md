@@ -5,11 +5,15 @@ end-to-end by generating documentation for real SDKs from the
 [`voxgig-sdk`](https://github.com/voxgig-sdk) organisation and then checking
 that the documentation describes the model it was built from.
 
-**Current state: 0/5 SDKs fully validated.** Every SDK generates documentation
-that passes all 17 structural checks and regenerates byte-identically; every
-SDK fails the text QA gate, on one defect that is the same everywhere. The
-latest run is in [`reports/latest/`](reports/latest/) and the two findings are
-described under [Findings](#findings).
+**Current state: read it from the run.** The most recent recorded run is
+[`reports/latest/REPORT.md`](reports/latest/REPORT.md), with the same run as data
+in [`reports/latest/report.json`](reports/latest/report.json). Its header carries
+the count, the tool versions each project resolved, and any condition the run was
+performed under. This page does not restate the number, because a count copied
+into prose is a count that rots: this paragraph called every SDK a failure
+while the report beside it recorded a full pass, and nothing told a reader which
+of the two was current. [Findings](#findings) records what the runs have turned
+up, and who owns each one.
 
 This is the documentation counterpart to
 [`sdkgen-validate`](https://github.com/voxgig/sdkgen-validate), and follows the
@@ -87,6 +91,14 @@ It reports **two scopes**, and the gap between them is the point:
 `--max-density <n>` turns the score into a gate, read from `all` by default.
 Without it the score is recorded and never fails a run.
 
+One caveat travels with the `all` scope. The text it scores was table cells, and
+`Vale.Repetition` reads a column of identical cells — `No`, `No`, `No` down a
+"required" column — as a repeated word. On a table-heavy API that is most of the
+density: on `carbonintensity` it was 102 of 110 warnings. The project's own
+configuration already holds that rule advisory across those boundaries, and the
+score is recorded rather than gated, but an `all` score read as a prose trend is
+partly reading table shape.
+
 ## What `check-docs` asserts
 
 `voxgig-docgen qa` already covers prose, broken local links and missing
@@ -131,7 +143,11 @@ validator. These are deliberate hard failures:
   into one that cannot fail.
 - **Absent is "not reached", never "passed".** The driver abandons an SDK at
   its first failure, so later phases have no record. `REPORT.md` names them as
-  not reached instead of calling the run clean.
+  not reached instead of calling the run clean. Two cousins of that rule are
+  qualified beside the count rather than left to the reader: a run whose
+  `summary.log` has no `result` record was killed rather than completed, and a
+  run with a gate switched off validated less than the sentence under the count
+  describes.
 
 ## Usage
 
@@ -149,7 +165,22 @@ make full  ARGS='--targets ts,go --vale'
 make full  ARGS='--max-density 15'      # make the prose score a gate
 ```
 
-`bin/validate-docgen --help` lists every option.
+`bin/validate-docgen --help` lists every option. Three things decide what a
+report can be read as:
+
+- `--note <text>` records one line with the run, which the summarizer prints
+  above the count. It is for a condition a reader has to know before reading the
+  result at all: an environment workaround, a deliberately narrowed selection.
+- `--scaffold-install <pkg@ver>` forces a package into each scaffolded project's
+  own `.sdk` while its dependency tree is built, with `--no-save` and inside the
+  run directory alone. The scaffold is created with `--no-install`, because the
+  install it would run is the one that runs the project's `postinstall`, and an
+  override applied after that install is applied too late. It is for a
+  transitive dependency published broken (see [Findings](#findings)), not for an
+  ordinary run, and the report names what was forced.
+- Every run records which `@voxgig/docgen`, `@voxgig/sdkgen` and `@voxgig/apidef`
+  each project resolved, so a clean report names the build it validated rather
+  than leaving it to be inferred from the date.
 
 ## Prerequisites
 
@@ -182,6 +213,43 @@ Neither is needed for an ordinary run. The default path scaffolds from the
 published `@voxgig/create-sdkgen`, which is exactly what a consumer gets.
 
 ## Findings
+
+### A published `@tabnas/parser` broke every fresh install (fixed in 0.11.1)
+
+`@tabnas/parser` 0.11.0 validated each option against the TYPE of its default.
+The `ender` default is an array and `@tabnas/yaml` passes a string, so the
+validator rejected a value the parser's own option reader accepts and splits
+(`'string' === typeof opts.ender ? opts.ender.split('')`). `@voxgig/apidef`
+requires `@tabnas/yaml` at module load, so requiring apidef threw before it
+parsed anything:
+
+```
+Error: Tabnas: options.ender: expected array, got string
+  at validateOptions (@tabnas/parser/dist/utility.js)
+  at Yaml (@tabnas/yaml/dist/yaml.js)
+  at @voxgig/apidef/dist/parse.js:12
+```
+
+Every scaffold in this harness hit it, and no manifest here could have stopped
+it: a scaffolded `.sdk` runs `node build/docgen.js` as its `postinstall`,
+docgen's `prepareProject` requires apidef, and `npm create @voxgig/sdkgen@latest`
+exited 1 before a page existed. The defect was neither docgen's nor this
+harness's.
+
+0.11.1 repairs it. A fresh `npm install @voxgig/apidef` resolves the fixed
+parser and requires cleanly, so a run needs no override, and a run that reports
+`options.ender: expected array, got string` is resolving 0.11.0 from somewhere
+rather than meeting an open defect.
+
+The escape hatch built for it stays, because the shape of the failure is not
+rare: a transitive dependency published broken, reached through a `postinstall`,
+where nothing this repo commits can pin it. `--scaffold-install <pkg@ver>`
+creates the scaffold with `--no-install` and then builds the dependency tree
+with the named package forced in, so the install that runs the `postinstall` has
+it. It is unsaved and confined to the run directory, so neither this repo's
+`package.json` nor a generated project's manifest is touched. A report with no
+`Scaffold install` line in its header forced nothing, which is the ordinary
+case.
 
 ### A missing phase, not a docgen defect (corrected)
 
@@ -264,9 +332,11 @@ Both are fixed in docgen, in opposite directions:
   wrote, because they are house style. The rules that describe a defect (a
   repeated word, an em dash, an emoji) still read everything.
 
-The recorded run in `reports/latest/` is against that build, which is why its
-header says so. Against the published `@voxgig/docgen` the two findings above
-still reproduce.
+Both fixes ship in the published `@voxgig/docgen`, so neither needs a checkout
+to reproduce against. Whether they stay closed is a question for a run rather
+than for this page: the report names the version it resolved beside its own
+result, so a later run that reopens either finding can be told apart from the
+one that closed it.
 
 Four of the five SDKs never hit any of this, and it took 313 schemas to
 surface it. That is the argument for picking a complexity range rather than a

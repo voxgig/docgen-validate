@@ -1,16 +1,15 @@
 # docgen-validate run
 
-Run: `20260921T194254Z`
+Run: `run-20260922T133541Z`
 
-- Started: 2026-09-21T19:42:54Z
-- Finished: 2026-09-21T19:51:50Z
+- Started: 2026-09-22T13:35:51Z
+- Finished: 2026-09-22T13:46:23Z
 - Targets: `ts`
 - Editions: `summary,github-pages,presentation`
 - Text QA: on (Vale on)
 - Presentation decks: on
 - Prose score: on (measured, not gated)
 - Byte-stability rerun: on
-- **Docgen: local checkout `/home/user/docgen/ts`, not the published package.**
 
 **5/5 SDKs fully validated.**
 
@@ -34,11 +33,11 @@ descriptions land. `authored` is the narrower text, docgen's own prose.
 
 | SDK | authored score | authored words | authored E/W/S | all score | all words | all E/W/S |
 | --- | --- | --- | --- | --- | --- | --- |
-| openfoodfacts | 94 | 2324 | 0/2/8 | 89.8 | 3431 | 0/4/23 |
-| univec | 93.2 | 2653 | 0/2/12 | 67.1 | 3370 | 0/33/12 |
-| aareguru | 79.1 | 2675 | 0/11/23 | 79.5 | 2736 | 0/11/23 |
-| carbonintensity | 84.8 | 3876 | 0/9/32 | 29.7 | 5445 | 0/110/53 |
-| hubspotmarketing | 72.9 | 22497 | 0/149/163 | 90.8 | 100846 | 0/252/176 |
+| openfoodfacts | 94.2 | 2414 | 0/2/8 | 90.1 | 3521 | 0/4/23 |
+| univec | 93.6 | 2833 | 0/2/12 | 68.7 | 3550 | 0/33/12 |
+| aareguru | 79 | 2810 | 0/11/26 | 79.4 | 2871 | 0/11/26 |
+| carbonintensity | 84.1 | 4281 | 0/9/41 | 33 | 5850 | 0/110/62 |
+| hubspotmarketing | 76 | 25422 | 0/149/163 | 91 | 103771 | 0/252/176 |
 
 ## Per-SDK detail
 
@@ -49,8 +48,9 @@ Source: `openfoodfacts-sdk`, spec `openfoodfacts_0.1.0.json`
 - targets: ts=ok
 - editions: summary=ok, github-pages=ok, presentation=ok
 - documentation checks: 17/17
-- prose (authored): score 94, density 6 over 2324 words, 0E 2W 8S
-- prose (all): score 89.8, density 10.2 over 3431 words, 0E 4W 23S
+- tools: docgen 0.26.0, sdkgen 4.23.0, apidef 8.15.0
+- prose (authored): score 94.2, density 5.8 over 2414 words, 0E 2W 8S
+- prose (all): score 90.1, density 9.9 over 3521 words, 0E 4W 23S
 - all phases clean
 
 ### univec
@@ -60,8 +60,9 @@ Source: `univec-sdk`, spec `univec-openapi.json`
 - targets: ts=ok
 - editions: summary=ok, github-pages=ok, presentation=ok
 - documentation checks: 17/17
-- prose (authored): score 93.2, density 6.8 over 2653 words, 0E 2W 12S
-- prose (all): score 67.1, density 32.9 over 3370 words, 0E 33W 12S
+- tools: docgen 0.26.0, sdkgen 4.23.0, apidef 8.15.0
+- prose (authored): score 93.6, density 6.4 over 2833 words, 0E 2W 12S
+- prose (all): score 68.7, density 31.3 over 3550 words, 0E 33W 12S
 - all phases clean
 
 ### aareguru
@@ -71,8 +72,9 @@ Source: `aareguru-sdk`, spec `aareguru_0.1.0.yaml`
 - targets: ts=ok
 - editions: summary=ok, github-pages=ok, presentation=ok
 - documentation checks: 17/17
-- prose (authored): score 79.1, density 20.9 over 2675 words, 0E 11W 23S
-- prose (all): score 79.5, density 20.5 over 2736 words, 0E 11W 23S
+- tools: docgen 0.26.0, sdkgen 4.23.0, apidef 8.15.0
+- prose (authored): score 79, density 21 over 2810 words, 0E 11W 26S
+- prose (all): score 79.4, density 20.6 over 2871 words, 0E 11W 26S
 - all phases clean
 
 ### carbonintensity
@@ -82,8 +84,9 @@ Source: `carbon-intensity-sdk`, spec `carbon-intensity_0.1.0.json`
 - targets: ts=ok
 - editions: summary=ok, github-pages=ok, presentation=ok
 - documentation checks: 17/17
-- prose (authored): score 84.8, density 15.2 over 3876 words, 0E 9W 32S
-- prose (all): score 29.7, density 70.3 over 5445 words, 0E 110W 53S
+- tools: docgen 0.26.0, sdkgen 4.23.0, apidef 8.15.0
+- prose (authored): score 84.1, density 15.9 over 4281 words, 0E 9W 41S
+- prose (all): score 33, density 67 over 5850 words, 0E 110W 62S
 - all phases clean
 
 ### hubspotmarketing
@@ -93,6 +96,7 @@ Source: `hubspot-marketing-sdk`, spec `hubspot-marketing-openapi.json`
 - targets: ts=ok
 - editions: summary=ok, github-pages=ok, presentation=ok
 - documentation checks: 17/17
-- prose (authored): score 72.9, density 27.1 over 22497 words, 0E 149W 163S
-- prose (all): score 90.8, density 9.2 over 100846 words, 0E 252W 176S
+- tools: docgen 0.26.0, sdkgen 4.23.0, apidef 8.15.0
+- prose (authored): score 76, density 24 over 25422 words, 0E 149W 163S
+- prose (all): score 91, density 9 over 103771 words, 0E 252W 176S
 - all phases clean

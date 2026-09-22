@@ -11,7 +11,10 @@
   "scripts": {
     "test": "node --test test/*.test.cjs"
   },
+  "engines": {
+    "node": "20 || >=22"
+  },
   "devDependencies": {
-    "@vvago/vale": "^3.14.2"
+    "@vvago/vale": "3.14.2"
   }
 }

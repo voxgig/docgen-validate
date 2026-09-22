@@ -76,10 +76,11 @@ score    = max(0, 100 - density)
 ```
 
 Every input is pinned, so the same documentation gives the same score on any
-machine: the binary is `@vvago/vale` from this repo's lockfile, the rules are
-the project's own `.sdk/doc/qa/vale.ini` (which pins Google's package by
-release URL, not by name), the text is docgen's own extraction, and every list
-in the output is sorted and every number fixed-precision.
+machine: the binary is the exact `@vvago/vale` version `package.json` names
+rather than a range an ordinary `npm update` could move a recorded score with,
+the rules are the project's own `.sdk/doc/qa/vale.ini` (which pins Google's
+package by release URL, not by name), the text is docgen's own extraction, and
+every list in the output is sorted and every number fixed-precision.
 
 It reports **two scopes**, and the gap between them is the point:
 
@@ -184,8 +185,11 @@ report can be read as:
 
 ## Prerequisites
 
-`node`, `npm` and `git`. Network access to npm and to github.com, unless the
-SDK repos are already cloned into the cache and `--no-fetch` is passed.
+Node `20 || >=22`, `npm` and `git`. That range is what `engines` in
+`package.json` declares; it is the floor this repo's own dependency tree
+already requires rather than a guess, and CI runs Node 24. Network access to
+npm and to github.com, unless the SDK repos are already cloned into the cache
+and `--no-fetch` is passed.
 
 The deck phase installs Slidev per SDK, which is roughly 500MB and a minute
 each. `--no-decks` skips it, at the cost of a broken-link report from qa.

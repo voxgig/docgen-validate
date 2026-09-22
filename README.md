@@ -156,6 +156,7 @@ validator. These are deliberate hard failures:
 make smoke     # the two smallest SDKs
 make full      # all five
 make test      # this repo's own tests
+make deps      # committed dependency sources, on their own
 ```
 
 Extra flags go through `ARGS`:
@@ -380,6 +381,9 @@ test/
   check-docs.test.cjs
   prose-score.test.cjs
   summarize.test.cjs
+tools/
+  comment-gate.cjs  # the source comment policy
+  dep-gate.cjs      # committed dependency sources (allowlist: dep-gate.json)
 reports/
   latest/           # the most recent recorded run
 ```

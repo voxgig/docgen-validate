@@ -1,9 +1,9 @@
 {
   "config": {
     "specs": "specs/default.txt",
-    "out": "/tmp/docgen-validate",
-    "cache": "/tmp/docgen-validate/_cache",
-    "run_dir": "/tmp/claude-0/-home-user/cfb18939-b702-5103-9c34-642c9ec7cecf/scratchpad/dv/run-20260922T133541Z",
+    "out": "/tmp/claude-0/-home-user/6e9761c0-5fc9-503a-a5e5-f711a35b5007/scratchpad/dvfull",
+    "cache": "/tmp/claude-0/-home-user/6e9761c0-5fc9-503a-a5e5-f711a35b5007/scratchpad/dvfull/_cache",
+    "run_dir": "/tmp/claude-0/-home-user/6e9761c0-5fc9-503a-a5e5-f711a35b5007/scratchpad/dvfull/_runs/20260924T125145Z",
     "org": "voxgig-sdk",
     "targets": "ts",
     "editions": "summary,github-pages,presentation",
@@ -18,8 +18,8 @@
     "max_density": "",
     "rerun": "on",
     "note": "",
-    "started": "2026-09-22T13:35:51Z",
-    "finished": "2026-09-22T13:46:23Z",
+    "started": "2026-09-24T12:51:45Z",
+    "finished": "2026-09-24T13:05:41Z",
     "passed": 5,
     "total": 5
   },
@@ -31,9 +31,9 @@
       "fetch_rc": 0,
       "scaffold_rc": 0,
       "versions": {
-        "docgen": "0.26.0",
-        "sdkgen": "4.23.0",
-        "apidef": "8.15.0"
+        "docgen": "0.27.0",
+        "sdkgen": "4.25.0",
+        "apidef": "8.17.0"
       },
       "targets": {
         "ts": 0
@@ -52,20 +52,20 @@
       "qa_rc": 0,
       "prose": {
         "authored": {
-          "score": 94.2,
-          "density": 5.8,
-          "words": 2414,
+          "score": 93.3,
+          "density": 6.7,
+          "words": 2251,
           "errors": 0,
           "warnings": 2,
-          "suggestions": 8
+          "suggestions": 9
         },
         "all": {
-          "score": 90.1,
-          "density": 9.9,
-          "words": 3521,
+          "score": 89.7,
+          "density": 10.3,
+          "words": 3195,
           "errors": 0,
           "warnings": 4,
-          "suggestions": 23
+          "suggestions": 21
         }
       },
       "score_rc": 0,
@@ -78,9 +78,9 @@
       "fetch_rc": 0,
       "scaffold_rc": 0,
       "versions": {
-        "docgen": "0.26.0",
-        "sdkgen": "4.23.0",
-        "apidef": "8.15.0"
+        "docgen": "0.27.0",
+        "sdkgen": "4.25.0",
+        "apidef": "8.17.0"
       },
       "targets": {
         "ts": 0
@@ -125,9 +125,9 @@
       "fetch_rc": 0,
       "scaffold_rc": 0,
       "versions": {
-        "docgen": "0.26.0",
-        "sdkgen": "4.23.0",
-        "apidef": "8.15.0"
+        "docgen": "0.27.0",
+        "sdkgen": "4.25.0",
+        "apidef": "8.17.0"
       },
       "targets": {
         "ts": 0
@@ -172,9 +172,9 @@
       "fetch_rc": 0,
       "scaffold_rc": 0,
       "versions": {
-        "docgen": "0.26.0",
-        "sdkgen": "4.23.0",
-        "apidef": "8.15.0"
+        "docgen": "0.27.0",
+        "sdkgen": "4.25.0",
+        "apidef": "8.17.0"
       },
       "targets": {
         "ts": 0
@@ -219,9 +219,9 @@
       "fetch_rc": 0,
       "scaffold_rc": 0,
       "versions": {
-        "docgen": "0.26.0",
-        "sdkgen": "4.23.0",
-        "apidef": "8.15.0"
+        "docgen": "0.27.0",
+        "sdkgen": "4.25.0",
+        "apidef": "8.17.0"
       },
       "targets": {
         "ts": 0

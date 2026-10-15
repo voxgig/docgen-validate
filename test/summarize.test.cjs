@@ -257,3 +257,42 @@ test('one gate off is named in the singular', () => {
 test('a run with every gate on claims no narrowing', () => {
   assert.ok(!render(parse(LOG), 'r').includes('Narrowed run'))
 })
+
+// check-docs asserts against the editions the model declares active, not the
+// ones the run asked for, so the report has to say which those were.
+
+test('the active editions are parsed and reported beside the requested ones', () => {
+  const data = parse(LOG.replace('hubspot-marketing_generate_rc=0',
+    'hubspot-marketing_generate_rc=0\nhubspot-marketing_editions_active=summary,github-pages'))
+  assert.strictEqual(data.sdks[0].editions_active, 'summary,github-pages')
+  const report = render(data, 'r')
+  assert.match(report, /- Editions requested: `summary,github-pages`/)
+  assert.match(report, /- Editions active: `summary,github-pages`/)
+  assert.match(report, /- active editions: summary, github-pages/)
+})
+
+test('an SDK whose model declares no active edition says none', () => {
+  const report = render(parse(LOG.replace('hubspot-marketing_generate_rc=0',
+    'hubspot-marketing_generate_rc=0\nhubspot-marketing_editions_active=')), 'r')
+  assert.match(report, /- Editions active: `none`/)
+  assert.match(report, /- active editions: none/)
+})
+
+test('SDKs that disagree on their active editions are not summarised as one list', () => {
+  const two = LOG.replace('result passed=1 total=1', [
+    'hubspot-marketing_editions_active=summary,github-pages',
+    'sdk=univec repo=voxgig-sdk/univec-sdk spec=u.json',
+    'univec_editions_active=summary',
+    'result passed=1 total=2'].join('\n'))
+  assert.match(render(parse(two), 'r'), /- Editions active: varies by SDK, see below/)
+})
+
+test('a run that recorded no active editions does not claim any', () => {
+  assert.match(render(parse(LOG), 'r'), /- Editions active: \?/)
+})
+
+test('a run that left the editions at their defaults says so', () => {
+  const report = render(parse(LOG.replace('config editions=summary,github-pages',
+    'config editions=summary,github-pages\nconfig activate_editions=off')), 'r')
+  assert.match(report, /- Editions requested: `summary,github-pages` \(left at docgen's defaults\)/)
+})

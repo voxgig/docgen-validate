@@ -264,3 +264,23 @@ test('a stub directly inside the presentation output is still caught', () => {
     assert.ok(failures(root).includes('no page is a stub'))
   } finally { Fs.rmSync(root, { recursive: true, force: true }) }
 })
+
+// With no website the summary links nothing, so a heading carries the entity's
+// class name alone and the raw name appears nowhere.
+test('a summary-only project names an entity by its class name', () => {
+  const root = build()
+  try {
+    const file = Path.join(root, '.sdk/model/sdk.json')
+    const model = JSON.parse(Fs.readFileSync(file, 'utf8'))
+    const { product, search } = model.main.kit.entity
+    model.main.kit.entity = { ephemeral_key: product, search }
+    delete model.main.kit.doc.edition['github-pages']
+    Fs.writeFileSync(file, JSON.stringify(model))
+    Fs.writeFileSync(Path.join(root, 'SUMMARY.md'),
+      SUMMARY.replace('The product entity', '### EphemeralKey\n\nThe key entity'))
+    assert.deepStrictEqual(failures(root), [])
+    Fs.writeFileSync(Path.join(root, 'SUMMARY.md'),
+      SUMMARY.replace('The product entity', '### Ephemeral\n\nThe key entity'))
+    assert.deepStrictEqual(failures(root), ['summary names every entity'])
+  } finally { Fs.rmSync(root, { recursive: true, force: true }) }
+})

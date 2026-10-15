@@ -48,7 +48,13 @@ For each SDK:
    opt-out for offline use and for reproducing an earlier run.
 2. **scaffold** — `npm create @voxgig/sdkgen@latest <name> -- --def <spec> --folder <out>`
 3. **target add** — `voxgig-sdkgen target add ts` (documentation describes the targets)
-4. **edition add** — `summary`, `github-pages`, `presentation`
+4. **edition add** — `summary`, `github-pages`, `presentation`, each then
+   switched on in `.sdk/model/project.aontu`. docgen ships `github-pages`
+   inactive, and `check-docs` asserts only what the model declares active, so an
+   edition left at its default would drop its checks without failing any.
+   `--no-activate-editions` leaves every edition at docgen's default. The
+   report prints the editions the model declared active beside the ones asked
+   for.
 5. **build** — `npm run build` in `<out>/.sdk`
 6. **generate** — `npm run generate`
 7. **deck** — build every presentation edition, exactly as the generated
@@ -113,7 +119,9 @@ covers that gap:
 - one API page per active entity, and no page for an entity the model does not have
 - one SDK page per active target, one page per active feature, and the full guide set
 - the summary's own "N entities and M HTTP routes" sentence agrees with the model
-- the summary names every entity
+- the summary names every entity, by its raw name or by its class name (the
+  comparison ignores case and `_`, because a summary with no website links
+  nothing and prints `EphemeralKey` for `ephemeral_key`)
 - no `ProjectName` / `PROJECTENV` / `$$ref$$` placeholder survives into published text
 - every HTML page has a title, and no page is a stub
 - every QA manifest entry exists, and every emitted page is in the manifest

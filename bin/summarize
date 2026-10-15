@@ -42,6 +42,9 @@ function parse(text) {
         continue
       }
     }
+    if ((match = line.match(/^(.+?)_editions_active=(.*)$/))) {
+      const sdk = sdks[match[1]]; if (sdk) { sdk.editions_active = match[2]; continue }
+    }
     if ((match = line.match(/^(.+?)_version_([\w-]+)=(\S*)$/))) {
       const sdk = sdks[match[1]]
       if (sdk) { sdk.versions = sdk.versions || {}; sdk.versions[match[2]] = match[3]; continue }
@@ -115,6 +118,14 @@ function proseTable(data) {
   ]
 }
 
+// What check-docs measured against, which can differ from what was requested.
+function activeEditions(data) {
+  const seen = [...new Set(data.sdks.map(sdk => sdk.editions_active).filter(v => undefined !== v))]
+  if (0 === seen.length) return '?'
+  if (1 < seen.length) return 'varies by SDK, see below'
+  return '`' + (seen[0] || 'none') + '`'
+}
+
 function render(data, runName) {
   const passed = data.config.passed ?? 0
   const total = data.config.total ?? data.sdks.length
@@ -131,7 +142,9 @@ function render(data, runName) {
     `- Started: ${data.config.started || '?'}`,
     `- Finished: ${data.config.finished || '?'}`,
     `- Targets: \`${data.config.targets || '?'}\``,
-    `- Editions: \`${data.config.editions || '?'}\``,
+    `- Editions requested: \`${data.config.editions || '?'}\`` +
+      ('off' === data.config.activate_editions ? ' (left at docgen\'s defaults)' : ''),
+    `- Editions active: ${activeEditions(data)}`,
     `- Text QA: ${data.config.qa || '?'} (Vale ${data.config.vale || '?'})`,
     `- Presentation decks: ${data.config.decks || '?'}`,
     `- Prose score: ${data.config.score || '?'}` +
@@ -179,6 +192,9 @@ function render(data, runName) {
       if (!sdk[kind]) continue
       const entries = Object.entries(sdk[kind]).map(([k, v]) => `${k}=${mark(v)}`)
       lines.push(`- ${kind}: ${entries.join(', ')}`)
+    }
+    if (undefined !== sdk.editions_active) {
+      lines.push(`- active editions: ${sdk.editions_active.split(',').filter(Boolean).join(', ') || 'none'}`)
     }
     if (undefined !== sdk.checks_total) {
       lines.push(`- documentation checks: ${sdk.checks_pass}/${sdk.checks_total}`)

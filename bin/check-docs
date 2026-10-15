@@ -150,7 +150,11 @@ function checkDocs(root) {
       counted
         ? `summary says ${counted[1]}/${counted[2]}, model has ${want.entities.length}/${want.routes}`
         : 'no count sentence found')
-    const named = want.entities.filter(e => !summary.includes(e))
+    // Without a website the summary prints the class name alone, so
+    // `ephemeral_key` appears only as `EphemeralKey`.
+    const squash = text => text.toLowerCase().replace(/_/g, '')
+    const said = squash(summary)
+    const named = want.entities.filter(e => !said.includes(squash(e)))
     ok('summary names every entity', 0 === named.length,
       named.length ? 'unnamed: ' + named.join(',') : '')
   }

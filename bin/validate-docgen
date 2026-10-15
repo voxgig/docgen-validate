@@ -9,7 +9,8 @@
 #  2b. scaffold-install  npm install --no-save <spec>  (only with --scaffold-install)
 #   3. overlay    optional: scaffold-owned src/ from a local create-sdkgen checkout
 #   4. target     voxgig-sdkgen target add <lang>   (docs describe the targets)
-#   5. edition    voxgig-sdkgen edition add <name>  (summary, github-pages, presentation)
+#   5. edition    voxgig-sdkgen edition add <name>  (summary, github-pages, presentation),
+#                 then switch it on in .sdk/model/project.aontu
 #   6. build      npm run build   in <out>/.sdk
 #   7. generate   npm run generate
 #   8. check      bin/check-docs  - does the documentation describe the model?
@@ -49,7 +50,9 @@ Usage: validate-docgen [options]
   --run-dir <dir>            Where logs are written (default: <out>/_runs/<UTC>)
   --org <name>               GitHub org holding the SDKs (default: ${ORG_DEFAULT})
   --targets <a,b,...>        SDK targets to add (default: ${TARGETS_DEFAULT})
-  --editions <a,b,...>       Editions to add (default: ${EDITIONS_DEFAULT})
+  --editions <a,b,...>       Editions to add and switch on (default: ${EDITIONS_DEFAULT})
+  --no-activate-editions     Add the editions but leave each one's active flag
+                             at docgen's default; github-pages ships off.
   --only <a,b,...>           Run only these SDKs
   --create-sdkgen-path <dir> Overlay scaffold-owned .sdk/src from a local
                              create-sdkgen checkout. Needed while the compact
@@ -104,6 +107,7 @@ RUN_DIR=""
 ORG="${ORG_DEFAULT}"
 TARGETS="${TARGETS_DEFAULT}"
 EDITIONS="${EDITIONS_DEFAULT}"
+ACTIVATE_EDITIONS=1
 ONLY=""
 CREATE_SDKGEN_PATH=""
 DOCGEN_PATH=""
@@ -136,6 +140,7 @@ while [ $# -gt 0 ]; do
     --org)                ORG="$2"; shift 2;;
     --targets)            TARGETS="$2"; shift 2;;
     --editions)           EDITIONS="$2"; shift 2;;
+    --no-activate-editions) ACTIVATE_EDITIONS=0; shift;;
     --only)               ONLY="$2"; shift 2;;
     --create-sdkgen-path) CREATE_SDKGEN_PATH="$2"; shift 2;;
     --docgen-path)        DOCGEN_PATH="$2"; shift 2;;
@@ -216,6 +221,7 @@ say() { echo "$*" | tee -a "${SUMMARY}"; }
   echo "config org=${ORG}"
   echo "config targets=${TARGETS}"
   echo "config editions=${EDITIONS}"
+  echo "config activate_editions=$([ "${ACTIVATE_EDITIONS}" = 1 ] && echo on || echo off)"
   echo "config create_sdkgen_path=${CREATE_SDKGEN_PATH}"
   echo "config docgen_path=${DOCGEN_PATH}"
   echo "config scaffold_install=${SCAFFOLD_INSTALL[*]:-}"
@@ -448,6 +454,18 @@ while IFS= read -r line || [ -n "${line}" ]; do
     (cd "${folder}/.sdk" && run_with_timeout "${TARGET_TIMEOUT}" \
       npx voxgig-sdkgen edition add "${edition}") > "${log_base}.edition.${edition}.log" 2>&1
     rc=$?
+    # An added edition can still be inactive by default, and check-docs only
+    # asserts what the model declares active, so asking for an edition has to
+    # switch it on or its checks silently drop out.
+    if [ "${rc}" = 0 ] && [ "${ACTIVATE_EDITIONS}" = 1 ]; then
+      project_model="${folder}/.sdk/model/project.aontu"
+      if [ -f "${project_model}" ]; then
+        printf "\nmain: kit: doc: edition: '%s': active: true\n" "${edition}" >> "${project_model}"
+      else
+        echo "cannot switch ${edition} on: no ${project_model}" >> "${log_base}.edition.${edition}.log"
+        rc=1
+      fi
+    fi
     echo "${name}_edition_${edition}_rc=${rc}" >> "${SUMMARY}"
     [ "${rc}" = 0 ] || { say "!! [${name}] edition add ${edition} FAILED rc=${rc}"; setup_ok=0; }
   done
@@ -469,6 +487,17 @@ while IFS= read -r line || [ -n "${line}" ]; do
   rc=$?
   echo "${name}_generate_rc=${rc}" >> "${SUMMARY}"
   [ "${rc}" = 0 ] || { say "!! [${name}] generate FAILED rc=${rc}"; continue; }
+
+  # The editions the compiled model declares active, which is what check-docs
+  # asserts against; the requested list only says what was asked for.
+  active_editions="$(node -e '
+    const m = require(process.argv[1] + "/.sdk/model/sdk.json")
+    const editions = m.main?.kit?.doc?.edition || {}
+    process.stdout.write(Object.entries(editions)
+      .filter(([, e]) => e && false !== e.active).map(([n]) => n).join(","))
+  ' "${folder}" 2>/dev/null)"
+  echo "${name}_editions_active=${active_editions}" >> "${SUMMARY}"
+  say ">> [${name}] active editions: ${active_editions:-none}"
 
   # 8. presentation decks
   #

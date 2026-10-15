@@ -7,7 +7,8 @@
 #   1. fetch      shallow-clone the SDK repo, take its .sdk/def/<spec>
 #   2. scaffold   npm create @voxgig/sdkgen@latest <name> -- --def <spec> --folder <out>
 #  2b. scaffold-install  npm install --no-save <spec>  (only with --scaffold-install)
-#   3. overlay    optional: scaffold-owned src/ from a local create-sdkgen checkout
+#   3. overlay    optional: scaffold-owned src/ from a local create-sdkgen checkout,
+#                 and local docgen, sdkgen or apidef checkouts linked into .sdk
 #   4. target     voxgig-sdkgen target add <lang>   (docs describe the targets)
 #   5. edition    voxgig-sdkgen edition add <name>  (summary, github-pages, presentation),
 #                 then switch it on in .sdk/model/project.aontu
@@ -58,6 +59,13 @@ Usage: validate-docgen [options]
                              create-sdkgen checkout. Needed while the compact
                              apidef schema migration is unreleased on npm.
   --docgen-path <dir>        Override @voxgig/docgen in <out>/.sdk with a checkout
+  --sdkgen-path <dir>        After scaffold, override @voxgig/sdkgen in <out>/.sdk
+                             with the local copy at <dir> (its package root,
+                             holding package.json). Validates generator fixes
+                             before they are published.
+  --apidef-path <dir>        After scaffold, override @voxgig/apidef in <out>/.sdk
+                             with the local copy at <dir>. Same semantics as
+                             --sdkgen-path.
   --scaffold-install <spec>  Force <spec> (a package@version) into the
                              scaffolded project's own .sdk while its
                              dependency tree is built. Repeatable. The
@@ -111,6 +119,8 @@ ACTIVATE_EDITIONS=1
 ONLY=""
 CREATE_SDKGEN_PATH=""
 DOCGEN_PATH=""
+SDKGEN_PATH=""
+APIDEF_PATH=""
 SCAFFOLD_INSTALL=()
 NO_FETCH=0
 NO_QA=0
@@ -144,6 +154,8 @@ while [ $# -gt 0 ]; do
     --only)               ONLY="$2"; shift 2;;
     --create-sdkgen-path) CREATE_SDKGEN_PATH="$2"; shift 2;;
     --docgen-path)        DOCGEN_PATH="$2"; shift 2;;
+    --sdkgen-path)        SDKGEN_PATH="$2"; shift 2;;
+    --apidef-path)        APIDEF_PATH="$2"; shift 2;;
     --scaffold-install)   SCAFFOLD_INSTALL+=("$2"); shift 2;;
     --no-fetch)           NO_FETCH=1; shift;;
     --no-qa)              NO_QA=1; shift;;
@@ -195,6 +207,20 @@ if [ -n "${DOCGEN_PATH}" ]; then
   DOCGEN_PATH="$(cd "${DOCGEN_PATH}" && pwd)"
 fi
 
+# A checkout's repository root holds no package.json for sdkgen or apidef, so
+# the name check is what catches `../sdkgen` given for `../sdkgen/ts`.
+local_package() {
+  local flag="$1" dir="$2" want="$3" got
+  [ -f "${dir}/package.json" ] || { echo "ERROR: ${flag}: no package.json at ${dir}" >&2; exit 2; }
+  got="$(node -e 'process.stdout.write(String(require(process.argv[1]).name))' \
+    "$(cd "${dir}" && pwd)/package.json" 2>/dev/null)"
+  [ "${got}" = "${want}" ] || {
+    echo "ERROR: ${flag}: expected package name ${want}, got '${got}'" >&2; exit 2; }
+  cd "${dir}" && pwd -P
+}
+[ -z "${SDKGEN_PATH}" ] || SDKGEN_PATH="$(local_package --sdkgen-path "${SDKGEN_PATH}" @voxgig/sdkgen)" || exit 2
+[ -z "${APIDEF_PATH}" ] || APIDEF_PATH="$(local_package --apidef-path "${APIDEF_PATH}" @voxgig/apidef)" || exit 2
+
 mkdir -p "${OUT_DIR}"
 OUT_DIR="$(cd "${OUT_DIR}" && pwd)"
 [ -n "${CACHE_DIR}" ] || CACHE_DIR="${OUT_DIR}/_cache"
@@ -224,6 +250,8 @@ say() { echo "$*" | tee -a "${SUMMARY}"; }
   echo "config activate_editions=$([ "${ACTIVATE_EDITIONS}" = 1 ] && echo on || echo off)"
   echo "config create_sdkgen_path=${CREATE_SDKGEN_PATH}"
   echo "config docgen_path=${DOCGEN_PATH}"
+  echo "config sdkgen_path=${SDKGEN_PATH}"
+  echo "config apidef_path=${APIDEF_PATH}"
   echo "config scaffold_install=${SCAFFOLD_INSTALL[*]:-}"
   echo "config qa=$([ "${NO_QA}" = 1 ] && echo off || echo on)"
   echo "config vale=$([ "${VALE}" = 1 ] && echo on || echo off)"
@@ -419,6 +447,27 @@ while IFS= read -r line || [ -n "${line}" ]; do
   if [ -n "${DOCGEN_PATH}" ]; then
     rm -rf "${folder}/.sdk/node_modules/@voxgig/docgen"
     ln -s "${DOCGEN_PATH}" "${folder}/.sdk/node_modules/@voxgig/docgen"
+  fi
+  link_ok=1
+  for linked in "sdkgen:${SDKGEN_PATH}" "apidef:${APIDEF_PATH}"; do
+    pkg="${linked%%:*}"; checkout="${linked#*:}"
+    [ -n "${checkout}" ] || continue
+    say ">> [${name}] link @voxgig/${pkg} ${checkout}"
+    mkdir -p "${folder}/.sdk/node_modules/@voxgig"
+    rm -rf "${folder}/.sdk/node_modules/@voxgig/${pkg}"
+    ln -s "${checkout}" "${folder}/.sdk/node_modules/@voxgig/${pkg}" >> "${log_base}.link.log" 2>&1
+    resolved="$(cd "${folder}/.sdk" && node -e '
+      const Fs = require("node:fs")
+      process.stdout.write(Fs.realpathSync(require.resolve(process.argv[1] + "/package.json")))
+    ' "@voxgig/${pkg}" 2>> "${log_base}.link.log")"
+    if [ "${resolved}" != "${checkout}/package.json" ]; then
+      echo "@voxgig/${pkg} resolves to '${resolved}', not ${checkout}" >> "${log_base}.link.log"
+      link_ok=0
+    fi
+  done
+  if [ -n "${SDKGEN_PATH}${APIDEF_PATH}" ]; then
+    echo "${name}_link_rc=$([ "${link_ok}" = 1 ] && echo 0 || echo 1)" >> "${SUMMARY}"
+    [ "${link_ok}" = 1 ] || { say "!! [${name}] link FAILED"; continue; }
   fi
 
   # Which build of each tool this run actually exercised. Without it a clean

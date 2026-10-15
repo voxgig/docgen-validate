@@ -296,3 +296,30 @@ test('a run that left the editions at their defaults says so', () => {
     'config editions=summary,github-pages\nconfig activate_editions=off')), 'r')
   assert.match(report, /- Editions requested: `summary,github-pages` \(left at docgen's defaults\)/)
 })
+
+// A run against a local generator says nothing about the published one, so
+// the checkout is named above the count and each SDK says whether it linked.
+
+test('a local sdkgen or apidef checkout is named in the report', () => {
+  const local = LOG.replace('config qa=on',
+    'config sdkgen_path=/w/sdkgen/ts\nconfig apidef_path=/w/apidef/ts\nconfig qa=on')
+    .replace('hubspot-marketing_scaffold_rc=0', 'hubspot-marketing_scaffold_rc=0\nhubspot-marketing_link_rc=0')
+  const data = parse(local)
+  assert.strictEqual(data.sdks[0].link_rc, 0)
+  const report = render(data, 'r')
+  assert.match(report, /- \*\*sdkgen: local checkout `\/w\/sdkgen\/ts`, not the published package\.\*\*/)
+  assert.match(report, /- \*\*apidef: local checkout `\/w\/apidef\/ts`, not the published package\.\*\*/)
+  assert.match(report, /- local links: ok/)
+})
+
+test('a failed local link is reported as a failure', () => {
+  const broken = LOG.replace('hubspot-marketing_scaffold_rc=0',
+    'hubspot-marketing_scaffold_rc=0\nhubspot-marketing_link_rc=1')
+  assert.match(render(parse(broken), 'r'), /- local links: FAIL/)
+})
+
+test('a run against the published tools names no local checkout', () => {
+  const report = render(parse(LOG.replace('config qa=on', 'config sdkgen_path=\nconfig apidef_path=\nconfig qa=on')), 'r')
+  assert.ok(!report.includes('local checkout'))
+  assert.ok(!report.includes('local links'))
+})

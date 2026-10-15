@@ -212,17 +212,25 @@ than skipping the phase: a phase that vanishes when a dependency is absent
 reports the same clean run as a phase that passed. `--no-score` is the
 explicit opt-out.
 
-## `--create-sdkgen-path` and `--docgen-path`
+## Local checkouts: `--create-sdkgen-path`, `--docgen-path`, `--sdkgen-path`, `--apidef-path`
 
-Both overlay a local checkout so an unreleased change can be validated before
+Each overlays a local checkout so an unreleased change can be validated before
 it ships. `--create-sdkgen-path` copies the scaffold-owned `.sdk/src` and
-nothing else; `--docgen-path` links the generator.
+nothing else; `--docgen-path` links the documentation generator.
+`--sdkgen-path` and `--apidef-path` link `@voxgig/sdkgen` and `@voxgig/apidef`
+into each project's `.sdk/node_modules` after the scaffold, with the same
+semantics as the flags of the same names in `sdkgen-validate`: the directory
+must be the package root, its `package.json` must name the package, and the
+run stops for an SDK whose project does not then resolve the package to that
+checkout. The versions each project resolved are recorded per SDK, so the
+report shows the local builds it ran against.
 
 ```bash
 make full ARGS='--create-sdkgen-path ../create-sdkgen'
+make full ARGS='--sdkgen-path ../sdkgen/ts --apidef-path ../apidef/ts'
 ```
 
-Neither is needed for an ordinary run. The default path scaffolds from the
+None is needed for an ordinary run. The default path scaffolds from the
 published `@voxgig/create-sdkgen`, which is exactly what a consumer gets.
 
 ## Findings

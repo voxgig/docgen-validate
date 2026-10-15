@@ -21,6 +21,7 @@ help:
 	@echo "To validate an unreleased tool checkout instead of the published one:"
 	@echo "  ARGS='--create-sdkgen-path ../create-sdkgen'"
 	@echo "  ARGS='--docgen-path ../docgen/ts'"
+	@echo "  ARGS='--sdkgen-path ../sdkgen/ts --apidef-path ../apidef/ts'"
 
 smoke:
 	$(VALIDATE) --specs $(SPECS_SMOKE) $(ARGS)

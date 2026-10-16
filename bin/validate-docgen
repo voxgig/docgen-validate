@@ -465,6 +465,15 @@ while IFS= read -r line || [ -n "${line}" ]; do
       link_ok=0
     fi
   done
+  # A linked sdkgen's types name jostraca through the checkout's own
+  # node_modules. An install dedupes to one jostraca, so the project's has to
+  # be that one too, or tsc cannot name the type (TS2883).
+  if [ -n "${SDKGEN_PATH}" ] && [ -e "${SDKGEN_PATH}/node_modules/jostraca" ]; then
+    jostraca="$(cd "${SDKGEN_PATH}/node_modules/jostraca" && pwd -P)"
+    say ">> [${name}] link jostraca ${jostraca}"
+    rm -rf "${folder}/.sdk/node_modules/jostraca"
+    ln -s "${jostraca}" "${folder}/.sdk/node_modules/jostraca" >> "${log_base}.link.log" 2>&1 || link_ok=0
+  fi
   if [ -n "${SDKGEN_PATH}${APIDEF_PATH}" ]; then
     echo "${name}_link_rc=$([ "${link_ok}" = 1 ] && echo 0 || echo 1)" >> "${SUMMARY}"
     [ "${link_ok}" = 1 ] || { say "!! [${name}] link FAILED"; continue; }

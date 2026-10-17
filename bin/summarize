@@ -31,7 +31,7 @@ function parse(text) {
     // An SDK name may contain characters `\w` does not cover (a hyphen, say),
     // so the name is matched against the names `sdk=` already announced rather
     // than by a character class that silently drops those records.
-    if ((match = line.match(/^(.+?)_(fetch|scaffold|overlay|build|generate|deck|check|qa|score|rerun)_rc=(-?\d+)$/))) {
+    if ((match = line.match(/^(.+?)_(fetch|scaffold|overlay|link|build|generate|deck|check|qa|score|rerun)_rc=(-?\d+)$/))) {
       const sdk = sdks[match[1]]; if (sdk) { sdk[match[2] + '_rc'] = Number(match[3]); continue }
     }
     if ((match = line.match(/^(.+?)_(target|edition)_(.+)_rc=(-?\d+)$/))) {
@@ -41,6 +41,9 @@ function parse(text) {
         sdk[match[2] + 's'][match[3]] = Number(match[4])
         continue
       }
+    }
+    if ((match = line.match(/^(.+?)_editions_active=(.*)$/))) {
+      const sdk = sdks[match[1]]; if (sdk) { sdk.editions_active = match[2]; continue }
     }
     if ((match = line.match(/^(.+?)_version_([\w-]+)=(\S*)$/))) {
       const sdk = sdks[match[1]]
@@ -115,6 +118,14 @@ function proseTable(data) {
   ]
 }
 
+// What check-docs measured against, which can differ from what was requested.
+function activeEditions(data) {
+  const seen = [...new Set(data.sdks.map(sdk => sdk.editions_active).filter(v => undefined !== v))]
+  if (0 === seen.length) return '?'
+  if (1 < seen.length) return 'varies by SDK, see below'
+  return '`' + (seen[0] || 'none') + '`'
+}
+
 function render(data, runName) {
   const passed = data.config.passed ?? 0
   const total = data.config.total ?? data.sdks.length
@@ -131,7 +142,9 @@ function render(data, runName) {
     `- Started: ${data.config.started || '?'}`,
     `- Finished: ${data.config.finished || '?'}`,
     `- Targets: \`${data.config.targets || '?'}\``,
-    `- Editions: \`${data.config.editions || '?'}\``,
+    `- Editions requested: \`${data.config.editions || '?'}\`` +
+      ('off' === data.config.activate_editions ? ' (left at docgen\'s defaults)' : ''),
+    `- Editions active: ${activeEditions(data)}`,
     `- Text QA: ${data.config.qa || '?'} (Vale ${data.config.vale || '?'})`,
     `- Presentation decks: ${data.config.decks || '?'}`,
     `- Prose score: ${data.config.score || '?'}` +
@@ -143,6 +156,8 @@ function render(data, runName) {
       [`- **Docgen: local checkout \`${data.config.docgen_path}\`, not the published package.**`] : []),
     ...(data.config.create_sdkgen_path ?
       [`- **create-sdkgen: local checkout \`${data.config.create_sdkgen_path}\`.**`] : []),
+    ...['sdkgen', 'apidef'].filter(pkg => data.config[pkg + '_path']).map(pkg =>
+      `- **${pkg}: local checkout \`${data.config[pkg + '_path']}\`, not the published package.**`),
     ...(data.config.scaffold_install ?
       [`- **Scaffold install: \`${data.config.scaffold_install}\` forced into each project,` +
         ' ephemerally and unsaved.**'] : []),
@@ -180,11 +195,17 @@ function render(data, runName) {
       const entries = Object.entries(sdk[kind]).map(([k, v]) => `${k}=${mark(v)}`)
       lines.push(`- ${kind}: ${entries.join(', ')}`)
     }
+    if (undefined !== sdk.editions_active) {
+      lines.push(`- active editions: ${sdk.editions_active.split(',').filter(Boolean).join(', ') || 'none'}`)
+    }
     if (undefined !== sdk.checks_total) {
       lines.push(`- documentation checks: ${sdk.checks_pass}/${sdk.checks_total}`)
     }
     if (undefined !== sdk.scaffold_install_rc) {
       lines.push(`- scaffold-install: ${mark(sdk.scaffold_install_rc)}`)
+    }
+    if (undefined !== sdk.link_rc) {
+      lines.push(`- local links: ${mark(sdk.link_rc)}`)
     }
     if (sdk.versions) {
       lines.push('- tools: ' + Object.entries(sdk.versions).map(([k, v]) => `${k} ${v}`).join(', '))

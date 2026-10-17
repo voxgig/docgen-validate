@@ -1,25 +1,28 @@
 {
   "config": {
-    "specs": "specs/default.txt",
-    "out": "/tmp/claude-0/-home-user/6e9761c0-5fc9-503a-a5e5-f711a35b5007/scratchpad/dvfull",
-    "cache": "/tmp/claude-0/-home-user/6e9761c0-5fc9-503a-a5e5-f711a35b5007/scratchpad/dvfull/_cache",
-    "run_dir": "/tmp/claude-0/-home-user/6e9761c0-5fc9-503a-a5e5-f711a35b5007/scratchpad/dvfull/_runs/20260924T125145Z",
+    "specs": "/home/richard/Projects/voxgig/docgen-validate/specs/default.txt",
+    "out": "/home/richard/.cache/voxgig-wave/2026-10-15-0/post/docgen-validate",
+    "cache": "/home/richard/.cache/voxgig-wave/2026-10-15-0/post/docgen-validate/_cache",
+    "run_dir": "/home/richard/.cache/voxgig-wave/2026-10-15-0/post/docgen-validate/_runs/post-2026-10-15-0",
     "org": "voxgig-sdk",
     "targets": "ts",
     "editions": "summary,github-pages,presentation",
+    "activate_editions": "on",
     "create_sdkgen_path": "",
     "docgen_path": "",
+    "sdkgen_path": "",
+    "apidef_path": "",
     "scaffold_install": "",
     "qa": "on",
-    "vale": "on",
+    "vale": "off",
     "decks": "on",
     "score": "on",
     "score_scope": "",
     "max_density": "",
     "rerun": "on",
     "note": "",
-    "started": "2026-09-24T12:51:45Z",
-    "finished": "2026-09-24T13:05:41Z",
+    "started": "2026-10-17T04:09:02Z",
+    "finished": "2026-10-17T04:19:02Z",
     "passed": 5,
     "total": 5
   },
@@ -31,9 +34,9 @@
       "fetch_rc": 0,
       "scaffold_rc": 0,
       "versions": {
-        "docgen": "0.27.0",
-        "sdkgen": "4.25.0",
-        "apidef": "8.17.0"
+        "docgen": "0.30.2",
+        "sdkgen": "4.35.0",
+        "apidef": "8.25.3"
       },
       "targets": {
         "ts": 0
@@ -45,27 +48,28 @@
       },
       "build_rc": 0,
       "generate_rc": 0,
+      "editions_active": "presentation,summary",
       "deck_rc": 0,
       "check_rc": 0,
-      "checks_pass": 17,
-      "checks_total": 17,
+      "checks_pass": 11,
+      "checks_total": 11,
       "qa_rc": 0,
       "prose": {
         "authored": {
-          "score": 93.3,
-          "density": 6.7,
-          "words": 2251,
+          "score": 87.9,
+          "density": 12.1,
+          "words": 1078,
           "errors": 0,
           "warnings": 2,
-          "suggestions": 9
+          "suggestions": 7
         },
         "all": {
-          "score": 89.7,
-          "density": 10.3,
-          "words": 3195,
+          "score": 88.2,
+          "density": 11.8,
+          "words": 1104,
           "errors": 0,
-          "warnings": 4,
-          "suggestions": 21
+          "warnings": 2,
+          "suggestions": 7
         }
       },
       "score_rc": 0,
@@ -78,9 +82,9 @@
       "fetch_rc": 0,
       "scaffold_rc": 0,
       "versions": {
-        "docgen": "0.27.0",
-        "sdkgen": "4.25.0",
-        "apidef": "8.17.0"
+        "docgen": "0.30.2",
+        "sdkgen": "4.35.0",
+        "apidef": "8.25.3"
       },
       "targets": {
         "ts": 0
@@ -92,27 +96,28 @@
       },
       "build_rc": 0,
       "generate_rc": 0,
+      "editions_active": "presentation,summary",
       "deck_rc": 0,
       "check_rc": 0,
-      "checks_pass": 17,
-      "checks_total": 17,
+      "checks_pass": 11,
+      "checks_total": 11,
       "qa_rc": 0,
       "prose": {
         "authored": {
-          "score": 93.6,
-          "density": 6.4,
-          "words": 2833,
+          "score": 91.6,
+          "density": 8.4,
+          "words": 1187,
           "errors": 0,
           "warnings": 2,
-          "suggestions": 12
+          "suggestions": 4
         },
         "all": {
-          "score": 68.7,
-          "density": 31.3,
-          "words": 3550,
+          "score": 91.8,
+          "density": 8.2,
+          "words": 1219,
           "errors": 0,
-          "warnings": 33,
-          "suggestions": 12
+          "warnings": 2,
+          "suggestions": 4
         }
       },
       "score_rc": 0,
@@ -125,9 +130,9 @@
       "fetch_rc": 0,
       "scaffold_rc": 0,
       "versions": {
-        "docgen": "0.27.0",
-        "sdkgen": "4.25.0",
-        "apidef": "8.17.0"
+        "docgen": "0.30.2",
+        "sdkgen": "4.35.0",
+        "apidef": "8.25.3"
       },
       "targets": {
         "ts": 0
@@ -139,27 +144,28 @@
       },
       "build_rc": 0,
       "generate_rc": 0,
+      "editions_active": "presentation,summary",
       "deck_rc": 0,
       "check_rc": 0,
-      "checks_pass": 17,
-      "checks_total": 17,
+      "checks_pass": 11,
+      "checks_total": 11,
       "qa_rc": 0,
       "prose": {
         "authored": {
-          "score": 79,
-          "density": 21,
-          "words": 2810,
+          "score": 62.3,
+          "density": 37.7,
+          "words": 1060,
           "errors": 0,
-          "warnings": 11,
-          "suggestions": 26
+          "warnings": 8,
+          "suggestions": 16
         },
         "all": {
-          "score": 79.4,
-          "density": 20.6,
-          "words": 2871,
+          "score": 63.9,
+          "density": 36.1,
+          "words": 1107,
           "errors": 0,
-          "warnings": 11,
-          "suggestions": 26
+          "warnings": 8,
+          "suggestions": 16
         }
       },
       "score_rc": 0,
@@ -172,9 +178,9 @@
       "fetch_rc": 0,
       "scaffold_rc": 0,
       "versions": {
-        "docgen": "0.27.0",
-        "sdkgen": "4.25.0",
-        "apidef": "8.17.0"
+        "docgen": "0.30.2",
+        "sdkgen": "4.35.0",
+        "apidef": "8.25.3"
       },
       "targets": {
         "ts": 0
@@ -186,27 +192,28 @@
       },
       "build_rc": 0,
       "generate_rc": 0,
+      "editions_active": "presentation,summary",
       "deck_rc": 0,
       "check_rc": 0,
-      "checks_pass": 17,
-      "checks_total": 17,
+      "checks_pass": 11,
+      "checks_total": 11,
       "qa_rc": 0,
       "prose": {
         "authored": {
-          "score": 84.1,
-          "density": 15.9,
-          "words": 4281,
+          "score": 65.2,
+          "density": 34.8,
+          "words": 1148,
           "errors": 0,
-          "warnings": 9,
-          "suggestions": 41
+          "warnings": 7,
+          "suggestions": 19
         },
         "all": {
-          "score": 33,
-          "density": 67,
-          "words": 5850,
+          "score": 68.3,
+          "density": 31.7,
+          "words": 1261,
           "errors": 0,
-          "warnings": 110,
-          "suggestions": 62
+          "warnings": 7,
+          "suggestions": 19
         }
       },
       "score_rc": 0,
@@ -219,9 +226,9 @@
       "fetch_rc": 0,
       "scaffold_rc": 0,
       "versions": {
-        "docgen": "0.27.0",
-        "sdkgen": "4.25.0",
-        "apidef": "8.17.0"
+        "docgen": "0.30.2",
+        "sdkgen": "4.35.0",
+        "apidef": "8.25.3"
       },
       "targets": {
         "ts": 0
@@ -233,27 +240,28 @@
       },
       "build_rc": 0,
       "generate_rc": 0,
+      "editions_active": "presentation,summary",
       "deck_rc": 0,
       "check_rc": 0,
-      "checks_pass": 17,
-      "checks_total": 17,
+      "checks_pass": 11,
+      "checks_total": 11,
       "qa_rc": 0,
       "prose": {
         "authored": {
-          "score": 76,
-          "density": 24,
-          "words": 25422,
+          "score": 95.5,
+          "density": 4.5,
+          "words": 3751,
           "errors": 0,
-          "warnings": 149,
-          "suggestions": 163
+          "warnings": 2,
+          "suggestions": 11
         },
         "all": {
-          "score": 91,
-          "density": 9,
-          "words": 103771,
+          "score": 95.8,
+          "density": 4.2,
+          "words": 4048,
           "errors": 0,
-          "warnings": 252,
-          "suggestions": 176
+          "warnings": 2,
+          "suggestions": 11
         }
       },
       "score_rc": 0,

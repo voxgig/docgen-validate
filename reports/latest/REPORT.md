@@ -1,12 +1,13 @@
 # docgen-validate run
 
-Run: `20260924T125145Z`
+Run: `post-2026-10-15-0`
 
-- Started: 2026-09-24T12:51:45Z
-- Finished: 2026-09-24T13:05:41Z
+- Started: 2026-10-17T04:09:02Z
+- Finished: 2026-10-17T04:19:02Z
 - Targets: `ts`
-- Editions: `summary,github-pages,presentation`
-- Text QA: on (Vale on)
+- Editions requested: `summary,github-pages,presentation`
+- Editions active: `presentation,summary`
+- Text QA: on (Vale off)
 - Presentation decks: on
 - Prose score: on (measured, not gated)
 - Byte-stability rerun: on
@@ -18,11 +19,11 @@ gate, the prose score and the byte-stability rerun all succeed.
 
 | SDK | fetch | scaffold | build | generate | deck | check | qa | score | rerun | doc checks |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| openfoodfacts | ok | ok | ok | ok | ok | ok | ok | ok | ok | 17/17 |
-| univec | ok | ok | ok | ok | ok | ok | ok | ok | ok | 17/17 |
-| aareguru | ok | ok | ok | ok | ok | ok | ok | ok | ok | 17/17 |
-| carbonintensity | ok | ok | ok | ok | ok | ok | ok | ok | ok | 17/17 |
-| hubspotmarketing | ok | ok | ok | ok | ok | ok | ok | ok | ok | 17/17 |
+| openfoodfacts | ok | ok | ok | ok | ok | ok | ok | ok | ok | 11/11 |
+| univec | ok | ok | ok | ok | ok | ok | ok | ok | ok | 11/11 |
+| aareguru | ok | ok | ok | ok | ok | ok | ok | ok | ok | 11/11 |
+| carbonintensity | ok | ok | ok | ok | ok | ok | ok | ok | ok | 11/11 |
+| hubspotmarketing | ok | ok | ok | ok | ok | ok | ok | ok | ok | 11/11 |
 
 ## Prose score
 
@@ -33,11 +34,11 @@ descriptions land. `authored` is the narrower text, docgen's own prose.
 
 | SDK | authored score | authored words | authored E/W/S | all score | all words | all E/W/S |
 | --- | --- | --- | --- | --- | --- | --- |
-| openfoodfacts | 93.3 | 2251 | 0/2/9 | 89.7 | 3195 | 0/4/21 |
-| univec | 93.6 | 2833 | 0/2/12 | 68.7 | 3550 | 0/33/12 |
-| aareguru | 79 | 2810 | 0/11/26 | 79.4 | 2871 | 0/11/26 |
-| carbonintensity | 84.1 | 4281 | 0/9/41 | 33 | 5850 | 0/110/62 |
-| hubspotmarketing | 76 | 25422 | 0/149/163 | 91 | 103771 | 0/252/176 |
+| openfoodfacts | 87.9 | 1078 | 0/2/7 | 88.2 | 1104 | 0/2/7 |
+| univec | 91.6 | 1187 | 0/2/4 | 91.8 | 1219 | 0/2/4 |
+| aareguru | 62.3 | 1060 | 0/8/16 | 63.9 | 1107 | 0/8/16 |
+| carbonintensity | 65.2 | 1148 | 0/7/19 | 68.3 | 1261 | 0/7/19 |
+| hubspotmarketing | 95.5 | 3751 | 0/2/11 | 95.8 | 4048 | 0/2/11 |
 
 ## Per-SDK detail
 
@@ -47,10 +48,11 @@ Source: `openfoodfacts-sdk`, spec `openfoodfacts_0.1.0.json`
 
 - targets: ts=ok
 - editions: summary=ok, github-pages=ok, presentation=ok
-- documentation checks: 17/17
-- tools: docgen 0.27.0, sdkgen 4.25.0, apidef 8.17.0
-- prose (authored): score 93.3, density 6.7 over 2251 words, 0E 2W 9S
-- prose (all): score 89.7, density 10.3 over 3195 words, 0E 4W 21S
+- active editions: presentation, summary
+- documentation checks: 11/11
+- tools: docgen 0.30.2, sdkgen 4.35.0, apidef 8.25.3
+- prose (authored): score 87.9, density 12.1 over 1078 words, 0E 2W 7S
+- prose (all): score 88.2, density 11.8 over 1104 words, 0E 2W 7S
 - all phases clean
 
 ### univec
@@ -59,10 +61,11 @@ Source: `univec-sdk`, spec `univec-openapi.json`
 
 - targets: ts=ok
 - editions: summary=ok, github-pages=ok, presentation=ok
-- documentation checks: 17/17
-- tools: docgen 0.27.0, sdkgen 4.25.0, apidef 8.17.0
-- prose (authored): score 93.6, density 6.4 over 2833 words, 0E 2W 12S
-- prose (all): score 68.7, density 31.3 over 3550 words, 0E 33W 12S
+- active editions: presentation, summary
+- documentation checks: 11/11
+- tools: docgen 0.30.2, sdkgen 4.35.0, apidef 8.25.3
+- prose (authored): score 91.6, density 8.4 over 1187 words, 0E 2W 4S
+- prose (all): score 91.8, density 8.2 over 1219 words, 0E 2W 4S
 - all phases clean
 
 ### aareguru
@@ -71,10 +74,11 @@ Source: `aareguru-sdk`, spec `aareguru_0.1.0.yaml`
 
 - targets: ts=ok
 - editions: summary=ok, github-pages=ok, presentation=ok
-- documentation checks: 17/17
-- tools: docgen 0.27.0, sdkgen 4.25.0, apidef 8.17.0
-- prose (authored): score 79, density 21 over 2810 words, 0E 11W 26S
-- prose (all): score 79.4, density 20.6 over 2871 words, 0E 11W 26S
+- active editions: presentation, summary
+- documentation checks: 11/11
+- tools: docgen 0.30.2, sdkgen 4.35.0, apidef 8.25.3
+- prose (authored): score 62.3, density 37.7 over 1060 words, 0E 8W 16S
+- prose (all): score 63.9, density 36.1 over 1107 words, 0E 8W 16S
 - all phases clean
 
 ### carbonintensity
@@ -83,10 +87,11 @@ Source: `carbon-intensity-sdk`, spec `carbon-intensity_0.1.0.json`
 
 - targets: ts=ok
 - editions: summary=ok, github-pages=ok, presentation=ok
-- documentation checks: 17/17
-- tools: docgen 0.27.0, sdkgen 4.25.0, apidef 8.17.0
-- prose (authored): score 84.1, density 15.9 over 4281 words, 0E 9W 41S
-- prose (all): score 33, density 67 over 5850 words, 0E 110W 62S
+- active editions: presentation, summary
+- documentation checks: 11/11
+- tools: docgen 0.30.2, sdkgen 4.35.0, apidef 8.25.3
+- prose (authored): score 65.2, density 34.8 over 1148 words, 0E 7W 19S
+- prose (all): score 68.3, density 31.7 over 1261 words, 0E 7W 19S
 - all phases clean
 
 ### hubspotmarketing
@@ -95,8 +100,9 @@ Source: `hubspot-marketing-sdk`, spec `hubspot-marketing-openapi.json`
 
 - targets: ts=ok
 - editions: summary=ok, github-pages=ok, presentation=ok
-- documentation checks: 17/17
-- tools: docgen 0.27.0, sdkgen 4.25.0, apidef 8.17.0
-- prose (authored): score 76, density 24 over 25422 words, 0E 149W 163S
-- prose (all): score 91, density 9 over 103771 words, 0E 252W 176S
+- active editions: presentation, summary
+- documentation checks: 11/11
+- tools: docgen 0.30.2, sdkgen 4.35.0, apidef 8.25.3
+- prose (authored): score 95.5, density 4.5 over 3751 words, 0E 2W 11S
+- prose (all): score 95.8, density 4.2 over 4048 words, 0E 2W 11S
 - all phases clean

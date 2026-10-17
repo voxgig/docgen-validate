@@ -35,7 +35,8 @@ Prefer local symlinks to sibling tool checkouts when developing or testing
 unreleased Voxgig tools together. Link to the actual package root (for example,
 `apidef/ts` or `sdkgen/ts`), build that checkout, and verify that the consumer
 resolves the linked code. Use existing validator local-path options where
-available: this repo has `--docgen-path` and `--create-sdkgen-path`.
+available: this repo has `--docgen-path`, `--sdkgen-path`, `--apidef-path` and
+`--create-sdkgen-path`.
 
 Do not create or copy `.zip`, `.tgz`, or `npm pack` snapshots into SDK projects
 or ad hoc `vendor/` folders just to use local changes. Keep temporary links in
